@@ -61,7 +61,7 @@
 
 
 
-## Awards
+## 수상
 - <b>SRCP: Space Robotics Challenge Phase 2 (NASA 미항공우주국) :	<a href="http://www.irobotnews.com/news/articleView.html?idxno=23801" target="_blank">Qualification Winner 2021.02 </a></b>
 
 
