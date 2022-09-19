@@ -58,7 +58,19 @@
 - 
 
 ### 4. 장애물 회피
-- 
+- 장애물을 탐지하기 위해 라이다(Lidar)센서를 사용
+- 라이다 센서로 거리만 탐지할경우 언덕이나 구덩이도 장애물(암석)으로 측정되는 문제가 발생
+<div align="center">
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/6-1%20언덕%20앞%20로봇.png" width="40%"/>&nbsp;
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/6-2%20암석%20앞%20로봇.png" width="40%"/>
+</div></br>
+- 라이다 센서로 측정된 점들의 연속성을 감지하는 알고리즘을 통해 암석과 언덕 지형을 구분
+ <div align="center">
+<img src="사진%26영상/Purdue-Hongik%20Team%20Qualifier%20Certificate.png" width="60%"/>
+</div></br>
+
+### 5. 광물 탐지
+- 인공지능 Image Classification 알고리즘인 YOLO를 사용해 카메라 영상에서 광물을 탐지하고 광물의 방향을 측정
 
 
 
