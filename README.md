@@ -39,7 +39,11 @@
 - 로봇에는 공통적으로 회전가능한 관절들과 라이트, 카메라, IMU 센서가 제공 
 - 로봇의 충전을 위해선 로봇을 회전시켜 태양광 패널로 충전을 하거나 Repair Station으로 복귀해야 함
 - 자원을 수송하는 Hauler가 Processing plant의 제출상자에 광물을 성공적으로 제출해야 점수가 획득
-
+<div align="center">
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/4.%20Processing%20plant.png" width="35%"/>&nbsp;
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/4-2%20Plant%26Hauler.png" width="35%"/>
+</div></br>
+ 
 ## 기능
 
 ### 1. 로봇 컨트롤러 (ROS)
