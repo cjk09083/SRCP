@@ -1,0 +1,46 @@
+<launch>
+    <arg name="output" default="screen"/>
+
+    <include file="$(find nasa_srcp_final)/launch/rtab.launch"/>
+
+    <include file="$(find darknet_ros)/launch/0701.launch"/>
+
+    <node name="team_controller" pkg="nasa_srcp_final" type="team_controller.py" output="$(arg output)" >
+        <param name="team_id" value="1" />
+    </node>
+
+    <node name="pose_publisher_scout_1" pkg="nasa_srcp_final" type="pose_publisher.py" output="$(arg output)" >
+        <param name="robot_name" value="small_scout_1" />
+    </node>
+
+    <node name="pose_publisher_excavator_1" pkg="nasa_srcp_final" type="pose_publisher.py" output="$(arg output)" >
+        <param name="robot_name" value="small_excavator_1" />
+    </node>
+
+    <node name="pose_publisher_hauler_1" pkg="nasa_srcp_final" type="pose_publisher.py" output="$(arg output)" >
+        <param name="robot_name" value="small_hauler_1" />
+    </node>
+
+    <group ns="/small_scout_1">
+        <node name="base_controller" pkg="nasa_srcp_final" type="base_controller.py" output="$(arg output)" >
+            <param name="robot_name" value="/small_scout_1" />
+            <param name="team_id" value="1" />
+        </node>
+    </group>
+
+    <group ns="/small_excavator_1">
+        <node name="base_controller" pkg="nasa_srcp_final" type="base_controller.py" output="$(arg output)" >
+            <param name="robot_name" value="/small_excavator_1" />
+            <param name="team_id" value="1" />
+        </node>
+    </group>
+
+    <group ns="/small_hauler_1">
+        <node name="base_controller" pkg="nasa_srcp_final" type="base_controller.py" output="$(arg output)" >
+            <param name="robot_name" value="/small_hauler_1" />
+            <param name="team_id" value="1" />
+        </node>
+    </group>
+
+
+</launch>

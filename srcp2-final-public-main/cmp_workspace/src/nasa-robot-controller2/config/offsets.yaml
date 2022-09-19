@@ -1,0 +1,16 @@
+# offsets for base stations and robot w.r.t spawn point
+
+# stations
+repair_station: [-6.0, -6.0]
+process_station: [-6.0, 7.0]
+
+# robot group 1
+hauler_1: [2.0, 4.0]
+excavator_1: [6.0, 4.0]
+scout_1: [10.0, 4.0]
+
+# robot group 2
+hauler_2: [2.0, 8.0]
+excavator_2: [6.0, 8.0]
+scout_2: [10.0, 8.0]
+

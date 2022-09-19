@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Initial Setup -->
+
+  <!-- Generating Odom frame -->
+
+  <!-- Stereo Camera -->
+  <group ns="small_scout_1/camera" >
+    <node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc"/>
+  </group>
+   <!-- Odometry-->
+  <group ns="small_scout_1">
+    <node pkg="rtabmap_ros" type="stereo_odometry" name="stereo_odometry">
+      <remap from="left/image_rect"       to="camera/left/image_rect" />
+      <remap from="right/image_rect"      to="camera/right/image_rect"/>
+      <remap from="left/camera_info"      to="camera/left/camera_info"/>
+      <remap from="right/camera_info"     to="camera/right/camera_info"/>
+
+      <param name="frame_id" type="string" value="small_scout_1_base_footprint"/>
+      <param name="odom_frame_id" type="string" value="small_scout_1/odom"/>
+
+      <param name="approx_sync"   type="bool" value="true"/>
+      <param name="queue_size"    type="int" value="50"/>
+
+      <param name="Vis/MinInliers" type="string" value="12"/>
+      <param name="Vis/RoiRatios"  type="string" value="0.03 0.03 0.04 0.04"/>
+    </node>
+
+
+    <node name="rtabmap" pkg="rtabmap_ros" type="rtabmap"  args="--delete_db_on_start" >
+      <param name="frame_id" type="string" value="/small_scout_1_base_footprint"/>
+
+      <param name="subscribe_scan" type="bool" value="true"/>
+      <param name="subscribe_stereo" type="bool" value="true"/>
+      <param name="subscribe_depth"  type="bool" value="true"/>
+      <param name="approx_sync"   type="bool" value="true"/>
+
+      <remap from="left/image_rect"   to="camera/left/image_rect"/>
+      <remap from="right/image_rect"  to="camera/right/image_rect"/>
+      <remap from="left/camera_info"  to="camera/left/camera_info"/>
+      <remap from="right/camera_info" to="camera/right/camera_info"/>
+      <remap from="depth/image"       to="camera/disparity"/>
+
+      <remap from="odom"              to="odom"/>
+      <remap from="scan"              to="laser/scan"/>
+
+      <param name="queue_size" type="int" value="50"/>
+      <param name="Grid/FromDepth" type="string" value="false"/>
+
+      <!-- RTAB-Map's parameters -->
+      <param name="Reg/Strategy"                 type="string" value="1"/>
+      <param name="Reg/Force3DoF"                type="string" value="true"/>
+      <param name="GridGlobal/MinSize"           type="string" value="20"/>
+    </node>
+
+  </group>
+
+
+  <group ns="small_scout_1">
+  <!-- Visualisation RTAB-Map -->
+  <node pkg="rtabmap_ros" type="rtabmapviz" name="rtabmapviz" args="-d $(find rtabmap_ros)/launch/config/rgbd_gui.ini" output="screen">
+     <param name="subscribe_stereo"     type="bool"   value="true"/>
+     <param name="subscribe_scan"   type="bool"   value="true"/>
+     <param name="subscribe_odom"   type="bool"   value="true"/>
+
+     <param name="subscribe_odom_info"  type="bool"   value="true"/>
+     <param name="queue_size"           type="int"    value="10"/>
+     <param name="frame_id"             type="string" value="/small_scout_1_base_footprint"/>
+
+     <remap from="left/image_rect"      to="camera/left/image_rect_color"/>
+     <remap from="right/image_rect"     to="camera/right/image_rect"/>
+     <remap from="left/camera_info"     to="camera/left/camera_info"/>
+     <remap from="right/camera_info"    to="camera/right/camera_info"/>
+     <remap from="odom"                 to="/small_scout_1/odom"/>
+     <remap from="scan"                 to="laser/scan"/>
+
+  </node>
+</group>
+
+</launch>

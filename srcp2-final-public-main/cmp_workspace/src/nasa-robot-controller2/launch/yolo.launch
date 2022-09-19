@@ -1,0 +1,5 @@
+<launch>
+
+    <include file="$(find darknet_ros)/launch/0701.launch"/>
+
+</launch>

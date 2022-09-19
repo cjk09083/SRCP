@@ -1,0 +1,7 @@
+<launch>
+
+    <include file="$(find darknet_ros)/launch/0709.launch"/>
+
+    <node pkg="nasa_srcp_final" type="cal_distance.py" name="cal_distance" output="screen"/>
+
+</launch>
