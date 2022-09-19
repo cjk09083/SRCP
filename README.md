@@ -12,9 +12,9 @@
 ## SRCP: Space Robotics Challenge Phase 2 (NASA) 프로젝트
 
  <div align="center">
-<img src="https://github.com/cjk09083/SRCP/blob/main/%EC%82%AC%EC%A7%84%26%EC%98%81%EC%83%81/0.%20Main.png" width="40%"/>
+<img src="%EC%82%AC%EC%A7%84%26%EC%98%81%EC%83%81/0.%20Main.png" width="40%"/>
  &nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/GAZEBO.png" width="55%"/>
+<img src="사진%26영상/GAZEBO.png" width="55%"/>
 </div>
  
 
@@ -33,17 +33,17 @@
 ## 구성
 - 로봇은 자원을 탐지하는 Scout, 채취하는 Excavator, 수송하는 Hauler가 2대씩 총 6대로 구성
 <div align="center">
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/1.%20Scout.png" width="30%"/>&nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/2.%20Excavator.png" width="35%"/>&nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/3.%20Hauler.png" width="24%"/>
+<img src="사진%26영상/1.%20Scout.png" width="30%"/>&nbsp;
+<img src="사진%26영상/2.%20Excavator.png" width="35%"/>&nbsp;
+<img src="사진%26영상/3.%20Hauler.png" width="24%"/>
 </div></br>
  
 - 로봇에는 공통적으로 회전가능한 관절들과 라이트, 카메라, IMU, LIDAR 센서가 제공 
 - 로봇의 충전을 위해선 로봇을 회전시켜 태양광 패널로 충전을 하거나 Repair Station으로 복귀해야 함
 - 자원을 수송하는 Hauler가 Processing plant의 제출상자에 광물을 성공적으로 제출해야 점수가 획득
 <div align="center">
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/4.%20Processing%20plant.png" width="28%"/>&nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/4-2%20Plant%26Hauler.png" width="45%"/>
+<img src="사진%26영상/4.%20Processing%20plant.png" width="28%"/>&nbsp;
+<img src="사진%26영상/4-2%20Plant%26Hauler.png" width="45%"/>
 </div></br>
  
 ## 기능
@@ -54,7 +54,7 @@
 - 모든 센서값과 제어 명령은 ROS 메세지로 구현
 
 ### 2. RTAB SLAM
-- 
+- Localization(현재 위치 파악)을 위해 RTAB SLAM(Simultaneous Localization and Mapping)을 활용해 Odometry(주행기록계) 구현 
 
 ### 3. 이미지 기반 거리 및 좌표 보정
 - 
@@ -63,12 +63,12 @@
 - 장애물을 탐지하기 위해 라이다(Lidar)센서를 사용
 - 라이다 센서로 거리만 탐지할경우 아래와 같이 언덕 지형(좌측)도 장애물(우측)으로 감지되는 문제가 발생
 <div align="center">
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/6-1%20언덕%20앞%20로봇.png" width="40%"/>&nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/6-2%20암석%20앞%20로봇.png" width="40%"/>
+<img src="사진%26영상/6-1%20언덕%20앞%20로봇.png" width="40%"/>&nbsp;
+<img src="사진%26영상/6-2%20암석%20앞%20로봇.png" width="40%"/>
 </div></br>
 - 라이다 센서로 측정된 점들의 연속성을 감지하는 알고리즘을 통해 암석과 언덕 지형을 구분
  <div align="center">
-<img src="사진%26영상/Purdue-Hongik%20Team%20Qualifier%20Certificate.png" width="60%"/>
+<img src="사진%26영상/장애물회피.gif" width="60%"/>
 </div></br>
 
 ### 5. 광물 탐지
