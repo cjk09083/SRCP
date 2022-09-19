@@ -62,5 +62,5 @@
 
 
  <div align="center">
-<img src="사진%26영상/Purdue-Hongik%20Team%20Qualifier%20Certificate.png" width="60%"/>
+<img src="사진%26영상/Purdue-Hongik%20Team%20Qualifier%20Certificate.png" width="100%"/>
 </div></br>
