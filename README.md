@@ -13,6 +13,8 @@
 
  <div align="center">
 <img src="https://github.com/cjk09083/SRCP/blob/main/%EC%82%AC%EC%A7%84%26%EC%98%81%EC%83%81/0.%20Main.png" width="60%"/>
+ &nbsp;
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/GAZEBO.png" width="30%"/>
 </div>
  
 
