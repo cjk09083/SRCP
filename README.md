@@ -53,13 +53,13 @@
 - 모든 로봇에 공통적으로 관절과 바퀴를 제어해 원하는 좌표까지 이동하는 메인 컨트롤러를 기본으로 개별 클래스로 카메라, 조명, 센서들, 버킷, 카고등을 연결
 - 모든 센서값과 제어 명령은 ROS 메세지로 구현 (Excavator가 광물을 채굴하도록 관절 제어)
 <div align="center">
-<img src="사진%26영상/채굴.png" width="60%"/>
+<img src="사진%26영상/채굴.gif" width="60%"/>
 </div></br>
 
 ### 2. RTAB SLAM
 - Localization(현재 위치 파악)을 위해 RTAB SLAM(Simultaneous Localization and Mapping)을 활용해 Odometry(주행기록계) 구현 
 <div align="center">
-<img src="사진%26영상/RTAB.png" width="60%"/>
+<img src="사진%26영상/RTAB.gif" width="60%"/>
 </div></br>
 
 ### 3. 이미지 기반 거리 및 좌표 보정
