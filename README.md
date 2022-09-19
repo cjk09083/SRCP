@@ -33,7 +33,7 @@
 <div align="center">
 <img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/1.%20Scout.png" width="30%"/>&nbsp;
 <img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/2.%20Excavator.png" width="35%"/>&nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/3.%20Hauler.png" width="25%"/>
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/3.%20Hauler.png" width="24%"/>
 </div></br>
  
 - 로봇에는 공통적으로 회전가능한 관절들과 라이트, 카메라, IMU 센서가 제공 
