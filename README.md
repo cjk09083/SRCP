@@ -55,9 +55,13 @@
 
 ### 2. RTAB SLAM
 - Localization(현재 위치 파악)을 위해 RTAB SLAM(Simultaneous Localization and Mapping)을 활용해 Odometry(주행기록계) 구현 
+- 아래 좌측 사진은 RTAB SLAM의 구현 예, 우측은 SRCP에서 구현된 RTAB SLAM
 
 ### 3. 이미지 기반 거리 및 좌표 보정
-- 
+- IMU와 SLAM을 사용해도 점점 위치 오차가 누적되기 때문에 광물을 탐지할때 좌표의 정확도가 하락
+- 광물을 탐지할때마다 맵의 중앙에 있는 Plant을 바라보고 카메라에 나타나는 건물의 높이를 통해 거리를 측정
+- 이후 측정된 거리와 필터링된 IMU 값을 이용해 현재 좌표를 보정
+- 이후 광물을 제출하러 기지 중앙에 왔을때도 Plant를 바라보고 좌표 보정
 
 ### 4. 장애물 회피
 - 장애물을 탐지하기 위해 라이다(Lidar)센서를 사용
