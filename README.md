@@ -59,3 +59,8 @@
 
 ## Awards
 - <b>SRCP: Space Robotics Challenge Phase 2 (NASA 미항공우주국) :	<a href="http://www.irobotnews.com/news/articleView.html?idxno=23801" target="_blank">Final Phase 진출 2021.02 </a></b>
+
+
+ <div align="center">
+<img src="사진%26영상/Purdue-Hongik%20Team%20Qualifier%20Certificate.png" width="60%"/>
+</div></br>
