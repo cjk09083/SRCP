@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: srcp2_models_final
+    relative_path: urdf/rovers/small_excavator/small_excavator.xacro
+    xacro_args: ""
+  SRDF:
+    relative_path: config/small_excavator.srdf
+  CONFIG:
+    author_name: Wonse Jo
+    author_email: jow@purdue.edu
+    generated_timestamp: 1625672181

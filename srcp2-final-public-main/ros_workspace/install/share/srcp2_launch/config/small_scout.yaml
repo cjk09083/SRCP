@@ -1,0 +1,21 @@
+joint_state_controller:
+  type: joint_state_controller/JointStateController
+  publish_rate: 15
+  extra_joints:
+   - name: 'bl_wheel_joint'
+   - name: 'br_wheel_joint'
+   - name: 'fl_wheel_joint'
+   - name: 'fr_wheel_joint'
+   - name: 'bl_steering_arm_tibia_joint'
+   - name: 'br_steering_arm_tibia_joint'
+   - name: 'fl_steering_arm_tibia_joint'
+   - name: 'fr_steering_arm_tibia_joint'
+   - name: 'bl_steering_arm_shoulder_joint'
+   - name: 'br_steering_arm_shoulder_joint'
+   - name: 'fl_steering_arm_shoulder_joint'
+   - name: 'fr_steering_arm_shoulder_joint'
+   - name: 'sensor_bar_pitch_joint'
+   - name: 'sensor_bar_yaw_joint'
+
+  # Scout
+   - name: 'volatile_sensor_joint'

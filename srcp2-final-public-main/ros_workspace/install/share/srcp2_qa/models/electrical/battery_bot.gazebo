@@ -1,0 +1,174 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:include filename="../../../srcp2_models_final/urdf/rovers/small_basic/small_rover_drive_motors.xacro"/>
+    <!-- <xacro:include filename="../sensors/sensor_motors.xacro"/> -->
+
+    <gazebo>
+        <plugin name="solar_panel_plugin" filename="libSolarPanelPlugin.so">
+            <efficiencyMin>0.75</efficiencyMin>
+            <efficiencyMax>0.90</efficiencyMax>
+            <!-- 
+                <consumer> : The values of the tags below must match the <consumer> tags 
+                implimented in the battery plugin sdf configuration
+            -->
+            <consumer uniqueName="solar_panel" />
+            <maxChargingRate>500000</maxChargingRate>
+        </plugin>
+
+        <plugin name="battery_plugin" filename="libBatteryPlugin.so">
+            <!-- model udpate rate (Hz) -->
+            <update_rate>100.0</update_rate>
+            <!-- WHrs -->
+            <maxCapacity>1</maxCapacity>
+            <!-- expect init = 100, safe = 25, shutdown = 10 -->
+            <!-- the test starts the battery below safe level and near a charger -->
+            <initialChargePercent>70</initialChargePercent>
+            <safeModePercent>80</safeModePercent>
+            <shutdownPercent>60</shutdownPercent>
+            <!-- safeModeAvailable = how much of requested would be available 
+                if it still fits in safe/low power charge level -->
+            <safeModeAvailable>0.5</safeModeAvailable>
+            <!-- W/s -->
+            <maxDischargeRate>5000000000</maxDischargeRate>
+            <!-- timeouts in seconds -->
+            <systemStartTimeout>4.0</systemStartTimeout>
+            <gzTopicTimeout>1.0</gzTopicTimeout>
+            <forceToWatts>1.0</forceToWatts>
+            
+            <!-- assuming all components may have a base usage (or at least leakage power) -->
+            <!-- charging -->
+            <!-- NOTE if we want to do angles, we'll likely want to drop constant_watts for solar_panel and do the math instead -->
+            <consumer uniqueName="solar_panel_left"  is_solar="true" constant_watts="-1000" />
+            <consumer uniqueName="solar_panel_right" is_solar="true" constant_watts="-1000" />
+            <!-- note separate charge_watts field for charging station applies when in proximity in meters-->            
+            <!-- <consumer uniqueName="charging_bot" charge_watts="-5000" charge_radius="1.0"/> -->
+            <consumer uniqueName="charging_box" charge_watts="-8000" charge_radius="2.0"/>
+
+            <!-- CPU and other base power consumers -->
+            <!-- <consumer active="false" uniqueName="cpu" constant_watts="500" /> -->
+
+            <!-- sensors -->
+            <!-- <consumer uniqueName="imu" />
+            <consumer uniqueName="stereoCamera" />
+            <consumer uniqueName="lidar" />
+            <consumer uniqueName="volatileSensor" />
+            <consumer uniqueName="lights" /> -->
+
+            <!-- motors -->
+            <consumer uniqueName="front_left_wheel/drive"  jointName="fl_wheel_joint" />
+            <consumer uniqueName="front_right_wheel/drive" jointName="fr_wheel_joint" />
+            <consumer uniqueName="back_left_wheel/drive"   jointName="bl_wheel_joint" />
+            <consumer uniqueName="back_right_wheel/drive"  jointName="br_wheel_joint" />
+
+            <!-- <consumer uniqueName="front_left_wheel/steer"  jointName="fl_steering_arm_tibia_joint" />
+            <consumer uniqueName="front_right_wheel/steer" jointName="fr_steering_arm_tibia_joint" />
+            <consumer uniqueName="back_left_wheel/steer"   jointName="bl_steering_arm_tibia_joint" />
+            <consumer uniqueName="back_right_wheel/steer"  jointName="br_steering_arm_tibia_joint" /> -->
+        </plugin>
+
+        <!-- battery test (motor) plugin -->
+        <plugin name="test_motor_plugin" filename="libTestMotorPlugin.so">
+            <!-- power request based on force request based on target position at a given (de)accel with given mass 
+            P = F * v, for P in watts, given F = force in N, v = velocity in m/s 
+            v = given by the user
+            F = f(v, m, d, dt...) = ?  momentum/inertia -> gearing/torque -> distance to center, mass * accel
+            -->
+            
+            <update_rate>100.0</update_rate>
+            <wattsToVelocity>0.04</wattsToVelocity>
+
+            <all_motors>
+
+                <!-- import the standard drive motors -->
+                <small_rover_drive_motor_constants/>
+
+                <!-- import the standard sensor motors -->
+                <standard_sensor_motor_constants/>
+
+            </all_motors>
+
+            <!-- TODO perform regen braking? Not supported without checking for joint velocity without force applied.  Would then want to apply braking force during regen. -->
+            <batteryTest>
+                <!-- power requests in Watts, actual available power response in Watts, mode expected =
+                    FullyOperational
+                    PowerSaving
+                    EmergencyShutdown
+
+                    wait for charge before testing
+                -->
+                <!-- initial charging -->
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <!-- charge 2x over safe level -->
+                <Power request="0"       actual="0"       mode="FullyOperational"/>
+                <Power request="0"       actual="0"       mode="FullyOperational"/>
+                <!-- run motors at nominal level -->
+                <Power request="5000"    actual="5000"    mode="FullyOperational"/>
+                <!-- to low, cuts to half, so do it twice -->
+                <Power request="10000"    actual="5000"     mode="PowerSaving"/>
+                <Power request="10000"    actual="5000"     mode="PowerSaving"/>
+                <Power request="10000"    actual="5000"     mode="PowerSaving"/>
+                <Power request="10000"    actual="5000"     mode="PowerSaving"/>
+                <!-- discharge to shutdown -->
+                <Power request="7000"    actual="0"       mode="EmergencyShutdown"/>
+                <!-- already shutdown, so no power -->
+                <Power request="7000"    actual="0"       mode="EmergencyShutdown"/>
+                <Power request="7000"    actual="0"       mode="EmergencyShutdown"/>
+                <!-- recharge -->
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+
+                <Power request="0"       actual="0"       mode="PowerSaving"/>
+                <!-- back to full -->
+                <Power request="0"       actual="0"       mode="FullyOperational"/>
+            </batteryTest>
+        </plugin>
+
+    </gazebo>
+
+    <!-- ******* The power consumption of each sensor should be provided by the sensor itself ******* -->
+
+
+    <!-- <sensorPowerConsumption>
+        <imu>50</imu>
+        <stereoCamera>250</stereoCamera>
+        <lidar>100</lidar>
+        <volatileSensor>200</volatileSensor>
+    </sensorPowerConsumption>
+    <lights>
+        <high>500</high>
+        <low>250</low>
+    </lights> -->
+
+
+<!--
+    <gazebo reference="fl_wheel_joint">
+        <plugin name="fl_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+    <gazebo reference="fr_wheel_joint">
+        <plugin name="fr_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+    <gazebo reference="bl_wheel_joint">
+        <plugin name="bl_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+    <gazebo reference="br_wheel_joint">
+        <plugin name="br_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+-->
+
+</robot>

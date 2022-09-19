@@ -1,0 +1,5 @@
+
+<launch>  
+     <include file="$(find small_excavator_moveit_config)/launch/excavator_1_arm_controller.launch"/>
+     <include file="$(find small_excavator_moveit_config)/launch/excavator_2_arm_controller.launch"/>
+</launch>

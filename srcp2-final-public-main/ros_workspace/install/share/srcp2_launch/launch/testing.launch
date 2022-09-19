@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, 2020, 2021, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+  Final Round Launchfile: create the final world for simulation,
+  development and QA, inject robots
+-->
+<launch>
+
+  <!-- optional input arguments and defaults -->
+  <arg name="use_gui" default="true"/>
+  <arg name="paused"  default="true"/>
+  <arg name="timeout" default="7200"/>
+  <arg name="seed"    default="42"/>
+
+  <arg name="center_x" default="0"/>
+  <arg name="center_y" default="0"/>
+  <arg name="scout_count"     default="0"/>
+  <arg name="hauler_count"    default="0"/>
+  <arg name="excavator_count" default="0"/>
+
+
+  <arg name="world"   default="$(find srcp2_launch)/worlds/final.world"/>
+
+  <!-- hard-coded default args -->
+  <arg name="spawning_delay" default="10.0"/>
+
+  <!-- global ROS parameters -->
+  <param name="spawning_delay" value="$(arg spawning_delay)" />
+  <param name="timeout"        value="$(arg timeout)" />
+
+  <env name="SRCP2_SPAWN_CENTER_X" value="$(arg center_x)"/>
+  <env name="SRCP2_SPAWN_CENTER_Y" value="$(arg center_y)"/>
+  <env name="SRCP2_SCOUTS"         value="$(arg scout_count)"/>
+  <env name="SRCP2_HAULERS"        value="$(arg hauler_count)"/>
+  <env name="SRCP2_EXCAVATORS"     value="$(arg excavator_count)"/>
+  
+  <!-- start simulation world, pass GUI, physics and GZserver options -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+      <arg name="world_name"        value="$(arg world)"/>
+      <arg name="paused"            value="$(arg paused)"/>
+      <arg name="gui"               value="$(arg use_gui)"/>
+      <arg name="verbose"           value="true"/>
+      <arg name="use_sim_time"      value="true"/>
+      <arg name="recording"         value="false"/>
+      <arg name="extra_gazebo_args" value="--seed $(arg seed)"/>
+  </include>
+
+  <!-- Inject the robot team -->
+  <!-- note: this uses environment vars to control it's configuration. They are
+             set by the config/config_parser.py script -->
+  <node
+      name    = "small_scout_spawning_node"
+      pkg     = "srcp2_launch"
+      type    = "team_spawner.bash"
+      output  = "screen"
+      respawn = "false" />
+
+</launch>

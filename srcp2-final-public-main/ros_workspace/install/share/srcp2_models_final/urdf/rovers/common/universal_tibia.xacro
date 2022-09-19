@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+    <!--
+        @brief This link connects the shoulder/knee to the wheels, and contains
+               the wheel yaw motors
+
+        Xacro:Macro parameters:
+        @param name: this link name
+        @param parent_name: name of parent link
+        @param side_sign: -1 is left, +1 is right
+        @param knee_joint_xyz: position of the knee joint with respect to the parent shoulder joint
+        @param visual_xyz: origin of the mesh visual
+        @param visual_rpy: mesh origin rotation
+        @param visual_scale: "x y z" scale
+
+        Expected globals (same for all tibias)
+        @param tibia_collision_length: length of the tibia colision in meters
+        @param tibia_mass: mass of the tibia in kg
+        @param tibia_collision_radius: radius of collision (m)
+        @param tibia_collision_length: length of collision (m)
+        @param ankle_joint_effort_limit: effort limit for motor yaw (Nm)
+        @param ankle_joint_velocity_limit: velocity limit for the motor yaw (rad/sec)
+        @param tibia_mesh: path to mesh from ros-package-root/models/rovers
+    -->
+    <xacro:macro name="universal_tibia" params="name parent_name visual_xyz visual_rpy visual_scale side_sign knee_joint_xyz tibia">
+
+
+        <!-- this is where the knee joins the strut, and knee ankle links origins are relative to this -->
+        <xacro:macro name="knee_joint_origin">
+            <origin
+                xyz="${knee_joint_xyz}"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="knee_motor_origin">
+            <origin
+                xyz="0 0 0"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="tibia_strut_origin">
+            <origin
+                xyz="0 0 ${-tibia_collision_length/2.0}"
+                rpy="0 0 0"/>
+        </xacro:macro>
+
+        <!-- Knee Link Geometry -->
+        <link name="${name}">
+
+            <collision name="${name}_knee_joint_collision">
+                <xacro:knee_motor_origin/>
+                <geometry>
+                    <cylinder radius="0.1" length="0.1"/>
+                </geometry>
+            </collision>
+
+            <collision name="${name}_strut_collision">
+                <xacro:tibia_strut_origin/>
+                <geometry>
+                    <cylinder radius="${tibia_collision_radius}" length="${0.2*tibia_collision_length}"/>
+                </geometry>
+            </collision>
+            <visual name="${name}_strut_visual">
+                <origin
+                    xyz="${visual_xyz}"
+                    rpy="${visual_rpy}"/> 
+               <geometry>
+                    <mesh
+                        filename = "package://srcp2_models_final/${tibia_mesh}"
+                        scale = "${visual_scale}"/>        
+                </geometry>
+            </visual>
+
+            <inertial>
+                <mass value = "${tibia_mass}"/>
+                <xacro:tibia_strut_origin/>
+                <xacro:cylinder_inertia 
+                    m="${tibia_mass}"
+                    r="${tibia_collision_radius}"
+                    h="${tibia_collision_length}"/>
+            </inertial>
+        </link>
+
+        <!-- connection of tibia to steering arm chassis  -->
+        <joint name="${tibia}_joint" type="revolute">
+            <xacro:knee_joint_origin/>
+            <parent link = "${parent_name}"/>
+            <child  link = "${name}"/>
+            <axis xyz="0 0 1" rpy="0 0 0" />
+            <fdir1>0 1 0</fdir1>
+            <limit
+                effort   = "${ankle_joint_effort_limit}" 
+                velocity = "${ankle_joint_velocity_limit}"
+                upper    = "${pi}"
+                lower    = "${-pi}"/>
+        </joint>
+
+        <gazebo reference="${tibia}_joint">
+            <provideFeedback>true</provideFeedback>
+        </gazebo>
+
+    </xacro:macro>
+</robot>

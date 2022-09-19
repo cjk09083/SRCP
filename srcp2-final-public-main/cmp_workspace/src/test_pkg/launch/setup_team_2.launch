@@ -1,0 +1,12 @@
+<?xml version="1.0"?>hongik_nasa_competition_pkg
+<launch> 
+<!-- Initial Setup -->
+
+<include file="$(find test_pkg)/launch/setup_scout_2.launch"/>
+<include file="$(find test_pkg)/launch/setup_excavator_2.launch"/>
+<include file="$(find test_pkg)/launch/setup_hauler_2.launch"/>
+
+<!--<node pkg="test_pkg" type="commander" name="commander" output="screen"/>-->
+
+
+</launch>

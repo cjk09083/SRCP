@@ -1,0 +1,11 @@
+#
+# Space Robotics Simulation, Phase 2
+# Copyright (c) 2019, NASA-JSC. All Rights Reserved
+# Unauthorized copying or distribution of this code is strictly prohibited
+#
+#
+# Robot spot-light control
+#
+float64 range
+---
+bool success

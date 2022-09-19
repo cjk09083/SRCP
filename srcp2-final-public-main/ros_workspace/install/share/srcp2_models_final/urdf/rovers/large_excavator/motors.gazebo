@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+    This XACRO file defines the large excavators' motors, initial PIDs and publication ros_topics
+    Joint effort maximums, friction, damping etc should be set in that joint's
+    xacro file
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:include filename="../large_basic/large_rover_drive_motors.xacro"/>
+    <xacro:include filename="../sensors/sensor_motors.xacro"/>
+ 
+    <gazebo>
+        <plugin name="rover_motors" filename="libRoverMotorsPlugin.so">
+
+            <update_rate>30.0</update_rate>
+            <all_motors>
+
+                <!-- import the standard drive motors -->
+                <large_rover_drive_motor_constants/>
+
+                <!-- todo: import the excavator arm motors here  -->
+
+                <!-- import the standard sensor motors -->
+                <standard_sensor_motor_constants/>
+
+            </all_motors>
+        </plugin>
+
+    </gazebo>
+</robot>

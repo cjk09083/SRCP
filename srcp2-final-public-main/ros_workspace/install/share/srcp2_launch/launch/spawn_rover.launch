@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Space Robotics Challenge (2)
+    NASA-JSC
+    Copyright (c) 2019, 2020, 2021
+    All Rights Reserved
+    Unauthorized distribution strictly prohibited
+    Spawn an instance of a rover type. This should be rosrun'd in a
+    loop to generate the required robot count.
+-->
+
+<launch>
+    <arg name="rover_name"  default="unamed_rover"/>
+    <arg name="rover_class" default="small_scout" />
+    <arg name="init_pose"   default="-x 0 -y 0 -z 0 -R 0 -P 0 -Y 0"/>
+    <arg name="use_noise"   default="$(env SRCP2_USE_NOISE)"/>
+
+    <group ns="$(arg rover_name)">
+
+        <param 
+            name    = "robot_description"
+            command = "$(find xacro)/xacro '$(find srcp2_models_final)/urdf/rovers/$(arg rover_class)/$(arg rover_class).xacro'
+            rover_name:=$(arg rover_name) use_noise:=$(arg use_noise)" />
+
+        <param
+            name  = "tf_prefix"
+            value = "$(arg rover_name)" />
+
+        <!-- Spawn the bots --> 
+
+        <node name      = "spawn_$(arg rover_name)"
+                pkg     = "gazebo_ros"
+                type    = "spawn_model"
+                args    = "-param /$(arg rover_name)/robot_description -urdf -model $(arg rover_name) $(arg init_pose)"
+                respawn = "false"
+                output  = "screen" />
+
+    </group>
+
+</launch>

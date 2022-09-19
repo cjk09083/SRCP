@@ -1,0 +1,6 @@
+classes= 9
+train  = NASA2/pic/train.txt
+valid  = NASA2/pic/train.txt
+names = NASA2/p2/p.names
+backup = NASA2/backup3
+

@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	Support block for lifting the wheels off the ground
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="support_block">
+
+        <link name="support_block">
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <box size="${support_length} ${support_width} ${support_height}"/>
+                </geometry>
+            </collision>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <box size="${support_length} ${support_width} ${support_height}"/>
+                </geometry>
+            </visual>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${support_mass}"/>
+                <box_inertia m="${support_mass}" x="${support_length}" y="${support_width}" z="${support_height}"/>
+           </inertial>
+        </link>
+
+        <joint name="support_block_joint" type="fixed">
+            <parent link="chassis"/>
+            <child link="support_block"/>
+            <origin xyz="0 0 -${chassis_height/2 + support_height/2}" rpy="0 0 0" />
+            <axis xyz="0 1 0" rpy="0 0 0" />
+        </joint>
+
+        <gazebo reference="support_block">
+            <material>Gazebo/Red</material>
+        </gazebo>
+    </xacro:macro>
+</robot>

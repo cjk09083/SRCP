@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+
+
+<!--
+    @brief large excavator rover for srcp2 final rounds
+-->
+<robot name="large_excavator" xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- includes -->
+    <xacro:include filename="../common/inertia_macros.xacro"/>
+    <xacro:include filename="../large_basic/large_rover_chassis.xacro"/>
+    <xacro:include filename="../large_basic/large_rover_drive.xacro"/>
+    <xacro:include filename="../large_basic/large_rover_power.xacro"/>
+
+    <!-- includes: motors -->
+    <xacro:include filename="motors.gazebo"/>
+
+    <!-- excavator hardware -->
+    <xacro:large_rover_chassis rover_name="large_excavator"/>
+    <xacro:large_rover_drive/>
+    <!-- <xacro:large_rover_power/> -->
+
+    <!-- Large Excavator Arm Machinery (hardware only) -->
+    <!-- todo: needs implementation -->
+    <!-- <xacro:include filename="large_excavator_arm.xacro"/> -->
+    <!-- <large_rover_excavator_arm parent="large_chassis"/> -->
+
+    <!-- Large Excavator sensor package -->
+    <!-- todo: needs implementation -->
+    <!-- <xacro:include filename="large_excavator_sensors.xacro"/> -->
+    <!-- <xacro:include filename="large_excavator_sensors.gazebo"/> -->
+
+    <!-- Large Excavator Gazebo Specific Settings -->
+    <!-- todo: needs implementation -->
+    <!-- <xacro:include filename="large_excavator.gazebo"/> -->
+
+</robot>
+
+      

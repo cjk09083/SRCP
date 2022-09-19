@@ -1,0 +1,8 @@
+prefix=/home/srcp2/ros_workspace/install
+
+Name: srcp2_heightmap
+Description: Description of srcp2_heightmap
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

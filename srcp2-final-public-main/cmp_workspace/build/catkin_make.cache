@@ -1,0 +1,2 @@
+darknet_ros/darknet_ros:darknet_ros/darknet_ros_msgs:nasa-robot-controller:small_excavator_controller:small_excavator_moveit_config:srcp2_basic_solution:test_pkg
+-DCATKIN_DEVEL_PREFIX=/home/srcp2/cmp_workspace/devel -DCMAKE_INSTALL_PREFIX=/home/srcp2/cmp_workspace/install -G Unix Makefiles

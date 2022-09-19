@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+  Test Processing Plant 
+-->
+<sdf version='1.6'>
+  <world name='default'>
+    <gravity>0 0 -1.62</gravity>
+
+    <!-- Light Source -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 0 0.0 0.0 0.0</pose>
+      <diffuse>1.0 1.0 1.0 1.0</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-1.0 0.0 -0.2</direction>
+    </light>
+
+    <!-- A ground plane -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <include>
+      <!-- <pose>0 0 0.260</pose> -->
+      <uri>model://qa_processing_plant</uri>
+    </include>
+
+  </world>
+</sdf>

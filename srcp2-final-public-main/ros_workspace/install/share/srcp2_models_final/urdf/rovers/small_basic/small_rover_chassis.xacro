@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!--
+       small rover chassis and all related constants
+    -->
+    <xacro:macro name="small_rover_chassis" params="rover_name">
+        <xacro:include filename="../common/universal_chassis.xacro"/>
+        
+        <xacro:property name="chassis_collision_x" value="1.2"/>
+        <xacro:property name="chassis_collision_y" value="0.75"/>
+        <xacro:property name="chassis_collision_z" value="0.2"/>
+
+        <xacro:universal_chassis
+            chassis_name = "small_chassis"
+            mass = "40.0"
+            dae_path   = "meshes/rovers/small_basic/small_chassis.dae"
+            visual_xyz = "0 0 0"
+            visual_rpy = "0 0 ${pi/2}"
+            visual_scale = "0.35 0.35 0.35" 
+            rover_name = "${rover_name}"/>
+
+    </xacro:macro>
+</robot>

@@ -1,0 +1,50 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+    <model name="digging_heightmap">
+      <static>true</static>
+      <link name="link">
+
+        <collision name="collision_digging_heightmap">
+          <geometry>
+            <heightmap>
+              <uri>file://runtime_heightmap.png</uri>
+              <size>200 200 3</size>
+              <pos>0 0 -0.9999</pos>
+            </heightmap>
+          </geometry>
+
+          <!-- <max_contacts>100</max_contacts> -->
+          <surface>
+            <friction>
+                <ode>
+                  <mu>1.0</mu>
+                  <mu2>1.0</mu2>
+                </ode>
+            </friction>
+            <contact>
+                <collide_bitmask>0x02</collide_bitmask>
+            </contact>
+          </surface>
+        </collision>
+
+        <visual name="visual_digging_heightmap">
+          <cast_shadows>true</cast_shadows>
+          <geometry>
+            <heightmap>
+              <use_terrain_paging>false</use_terrain_paging>
+              <texture>
+                <diffuse>file://lunar_gravel.png</diffuse>
+                <normal> file://lunar_gravel_normal.png</normal>
+                <size>5</size>
+              </texture>
+              <uri>file://runtime_heightmap.png</uri>
+              <size>200 200 3</size>
+              <pos>0 0 -0.9999</pos>
+            </heightmap>
+          </geometry>
+        </visual>
+
+      </link>
+    </model>
+</sdf>
+

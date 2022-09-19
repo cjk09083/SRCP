@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+  Launch QA Test world
+-->
+<launch>
+
+  <arg name="use_gui"        default="true"/>
+  <arg name="spawning_delay" default="100"/>
+  <arg name="paused"         default="true"/>
+  <arg name="run_endless"    default="false"/>
+  <arg name="seed"           default="-1"/>
+  <arg name="use_noise"      default="true"/>
+
+  <param name="spawning_delay" value="$(arg spawning_delay)" />
+  <param name="run_endless"    value="$(arg run_endless)" />
+  <param name="seed"           value="$(arg seed)" />
+  <param name="use_noise"      value="$(arg use_noise)" /> 
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"   value="$(find srcp2_qa)/worlds/basic_qa.world"/>
+    <arg name="paused"       value="$(arg paused)"/>
+    <arg name="gui"          value="$(arg use_gui)"/>
+    <arg name="extra_gazebo_args" value="--seed $(arg seed)"/>
+
+    <arg name="verbose"      value="true"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="recording"    value="false"/>
+  </include>
+
+
+
+  <!-- Volatile Information: this is necessary or volatile sensor throws afit -->
+  <rosparam file="$(find srcp2_launch)/config/common/common.yaml"      command="load"/>
+  <rosparam file="$(find srcp2_launch)/config/common/config_base.yaml" command="load"/>
+  <param name="volatile_sdf_path"    value="$(find srcp2_gazebo)/data/volatile_sdf" />
+  <param name="volatile_traits_path" value="$(find srcp2_gazebo)/data/volatile_traits.csv" />
+
+
+
+  <!-- we are just spawning one scout at this time -->
+  <arg name="scout_name"   value="scout_1"/>
+  <param name="scout_name" value="$(arg scout_name)" />
+
+  <group ns="scout_1">
+    <param name="robot_description" command="$(find xacro)/xacro $(find srcp2_models_qual)/models/robots/small_rover/urdf/scout/scout.xacro" />
+    <param name="tf_prefix" value="scout_1_tf" />
+
+    <include file="$(find srcp2_launch)/launch/one_robot.launch">
+      <arg name="init_pose"        value="-x 0 -y 0 -z 1" />
+      <arg name="robot_name"       value="scout_1" />
+      <arg name="spawn_rover_name" value="spawn_scout_1" />
+    </include>
+
+    <include file="$(find srcp2_qual_control)/launch/small_rover_scout_controller.launch">
+      <arg name="robot_name"                 value="scout_1" />
+      <arg name="controller_spawner_name"    value="scout_1_controller_manager" />
+      <arg name="node_name"                  value="scout_1_control" />
+      <arg name="robot_state_publisher_name" value="scout_1_state_publisher" />
+    </include>
+  </group>
+
+  <!-- Excavator spawn -->
+  <!-- <arg name="excavator_name"   value="excavator_1"/>
+  <param name="excavator_name" value="$(arg excavator_name)" />
+
+  <group ns="excavator_1">
+    <param name="robot_description" command="$(find xacro)/xacro $(find srcp2_models_qual)/models/robots/small_rover/urdf/excavator/excavator.xacro" />
+    <param name="tf_prefix" value="excavator_1_tf" />
+
+    <include file="$(find srcp2_launch)/launch/one_robot.launch">
+      <arg name="init_pose"        value="-x -15 -y 0 -z 1" />
+      <arg name="robot_name"       value="excavator_1" />
+      <arg name="spawn_rover_name" value="spawn_excavator_1" />
+    </include>
+
+    <include file="$(find srcp2_qual_control)/launch/small_rover_excavator_controller.launch">
+      <arg name="robot_name"                 value="excavator_1" />
+      <arg name="controller_spawner_name"    value="excavator_1_controller_manager" />
+      <arg name="node_name"                  value="excavator_1_control" />
+      <arg name="robot_state_publisher_name" value="excavator_1_state_publisher" />
+    </include>
+  </group> -->
+
+
+</launch>

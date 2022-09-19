@@ -1,0 +1,17 @@
+<!--
+    Space Robotics Simulation2
+    Copyright (c) 2019, NASA-JSC   
+
+    CommonTools ROS Testing
+-->
+<launch>
+  <!-- <node 
+    pkg  = "srcp2_gazebo"
+    type = "CommonToolsRosTest"
+    name = "common_tools_ros_test" /> -->
+
+  <test 
+    test-name = "test_common_tools"
+    pkg       = "srcp2_gazebo"
+    type      = "CommonToolsRosTest" />
+</launch>

@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2020, 2021 All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+    This XACRo file is intended to slot into the RoverMotorPlugin vonfig
+    for all small rovers, to ensure that uniform sensor motor constants are
+    applied to all small rover classes
+-->
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+ 
+    <!-- YAW motor PID and other constants -->
+    <xacro:property name="sensor_pan_kp"  value="150.0"/>
+    <xacro:property name="sensor_pan_ki"  value="0.1"/>
+    <xacro:property name="sensor_pan_kd"  value="0.0"/>
+
+    <!-- PITCH motor PID and other constants -->
+    <xacro:property name="sensor_tilt_kp"  value="150.0"/>
+    <xacro:property name="sensor_tilt_ki"  value="0.1"/>
+    <xacro:property name="sensor_tilt_kd"  value="0.0"/>
+
+    <xacro:macro name="sensor_motors">
+
+        <!-- SENSOR YAW MOTOR -->
+        <motor>
+            <model_joint_name>sensor_bar_yaw_joint</model_joint_name>
+            <controller_type>position</controller_type>
+            <ros_topic>sensor/yaw/command/position</ros_topic>
+            <start>0</start>
+            <kp>${sensor_pan_kp}</kp>
+            <ki>${sensor_pan_ki}</ki>
+            <kd>${sensor_pan_kd}</kd>
+        </motor>
+
+        <!-- SENSOR PITCH MOTOR -->
+        <motor>
+            <model_joint_name>sensor_bar_pitch_joint</model_joint_name>
+            <controller_type>position</controller_type>
+            <ros_topic>sensor/pitch/command/position</ros_topic>
+            <start>0</start>
+            <kp>${sensor_tilt_kp}</kp>
+            <ki>${sensor_tilt_ki}</ki>
+            <kd>${sensor_tilt_kd}</kd>
+        </motor>
+
+    </xacro:macro>
+</robot>

@@ -1,0 +1,8 @@
+prefix=/home/srcp2/ros_workspace/install
+
+Name: srcp2_msgs
+Description: Description of srcp2_msgs
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: geometry_msgs message_generation message_runtime sensor_msgs std_msgs

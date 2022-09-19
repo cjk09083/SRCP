@@ -1,0 +1,29 @@
+<launch>
+
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
+
+  <arg name="rviz_config" default="" />
+  <arg     if="$(eval rviz_config=='')" name="command_args" value="" />
+  <arg unless="$(eval rviz_config=='')" name="command_args" value="-d $(arg rviz_config)" />
+
+  <node name="$(anon rviz)" launch-prefix="$(arg launch_prefix)" pkg="rviz" type="rviz" respawn="false"
+        args="$(arg command_args)" output="screen">
+    
+    <remap from="/rviz/moveit/plan" to="rviz/moveit/plan"/>
+    <remap from="/rviz/moveit/execute" to="rviz/moveit/execute"/>
+    <remap from="/rviz/moveit/stop" to="rviz/moveit/stop"/>
+
+    <remap from="/rviz/moveit/move_marker/goal_small_excavator_scoop" to="rviz/moveit/move_marker/goal_small_excavator_scoop"/>
+    
+    <remap from="/rviz/moveit/select_planning_group" to="rviz/moveit/select_planning_group"/>
+    <remap from="/rviz/moveit/update_custom_goal_state" to="rviz/moveit/update_custom_goal_state"/>
+    <remap from="/rviz/moveit/update_custom_start_state" to="rviz/moveit/update_custom_start_state"/>
+    <remap from="/rviz/moveit/update_goal_state" to="rviz/moveit/update_goal_state"/>
+    <remap from="/rviz/moveit/update_start_state" to="rviz/moveit/update_start_state"/>
+
+
+  </node>
+
+</launch>

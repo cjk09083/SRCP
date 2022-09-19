@@ -1,0 +1,6 @@
+#! /usr/bin/env python3
+import hellobots.hauler
+
+
+if __name__ == '__main__':
+    hellobots.hauler.main()

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, 2020, 2021, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+  Final Round Launchfile: create the final world for simulation,
+  development and QA, inject robots
+-->
+<launch>
+
+  <!-- optional input arguments and defaults -->
+  <arg name="use_gui" default="$(env SRCP2_USE_GUI)"/>
+  <arg name="paused"  default="$(env SRCP2_START_PAUSED)"/>
+  <arg name="timeout" default="$(env SRCP2_DURATION)"/>
+  <arg name="seed"    default="$(env SRCP2_SEED)"/>
+  <arg name="world"   default="$(find srcp2_launch)/worlds/final.world"/>
+  
+  <arg name="run_endless"               default="$(env SRCP2_RUN_ENDLESS)"/>
+  <arg name="system_monitor_enabled"    default="$(env SRCP2_SYSTEM_MONITOR_ENABLED)"/>
+  <arg name="use_noise"                 default="$(env SRCP2_USE_NOISE)"/>
+  <arg name="start_power_percentage"    default="$(env SRCP2_START_POWER_PERCENTAGE)"/>
+  <arg name="sync"                      default="$(env SRCP2_SYNC)"/>
+
+  <!-- hard-coded default args -->
+  <arg name="spawning_delay" default="10.0"/>
+
+  <!-- global ROS parameters -->
+  <param name="spawning_delay" value="$(arg spawning_delay)" />
+  <param name="timeout"        value="$(arg timeout)" />
+
+  <param name="run_endless"            value="$(arg run_endless)" />
+  <param name="system_monitor_enabled" value="$(arg system_monitor_enabled)" />
+  <param name="use_noise"              value="$(arg use_noise)" />
+  <param name="start_power_percentage" value="$(arg start_power_percentage)" />
+
+  <!-- start simulation world, pass GUI, physics and GZserver options -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+      <arg name="world_name"        value="$(arg world)"/>
+      <arg name="paused"            value="$(arg paused)"/>
+      <arg name="gui"               value="$(arg use_gui)"/>
+      <arg name="verbose"           value="true"/>
+      <arg name="use_sim_time"      value="true"/>
+      <arg name="recording"         value="false"/>
+      <arg name="extra_gazebo_args" value="$(arg sync) --seed $(arg seed)"/>
+  </include>
+
+  <!-- Inject the robot team -->
+  <!-- note: this uses environment vars to control it's configuration. They are
+             set by the config/config_parser.py script -->
+  <node
+      name    = "small_scout_spawning_node"
+      pkg     = "srcp2_launch"
+      type    = "team_spawner.bash"
+      args    = ""
+      output  = "screen"
+      respawn = "false" />
+
+</launch>

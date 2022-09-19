@@ -1,0 +1,7 @@
+set(srcp2_basic_solution_SETUP_PY_SETUP_MODULE "setuptools")
+set(srcp2_basic_solution_SETUP_PY_VERSION "0.0.0")
+set(srcp2_basic_solution_SETUP_PY_SCRIPTS "")
+set(srcp2_basic_solution_SETUP_PY_PACKAGES "hellobots")
+set(srcp2_basic_solution_SETUP_PY_PACKAGE_DIRS "src/hellobots")
+set(srcp2_basic_solution_SETUP_PY_MODULES "")
+set(srcp2_basic_solution_SETUP_PY_MODULE_DIRS "")

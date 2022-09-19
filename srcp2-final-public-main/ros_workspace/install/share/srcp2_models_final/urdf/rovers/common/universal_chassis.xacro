@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- 
+        @brief universal chassis creation macro. This will be used by all classes of robot
+
+        @param name name of the chassis link
+        @param mass mass of the chassis link (kg)
+        @param dae_path path from entry in GAZEBO_MODEL_PATH to chassis dae
+        @param visual_xyz combined xyz of chassis dae mesh, separated by spaces (m)
+        @param visual_rpy combined roll, pitch, yaw of chassis dae mesh, separated by spaces (rad)
+        @param visual_scale scale factors (0,1] of chassis dae mesh
+
+        The following xacro properties are expected to be defined globally:
+        @param chassis_collision_x size of chassis collision/inertia in the x direction (m)
+        @param chassis_collision_y size of chassis collision/inertia in the y direction (m)
+        @param chassis_collision_z size of chassis collision/inertia in the z direction (m)
+    -->
+    <xacro:macro name="universal_chassis" params="chassis_name mass dae_path visual_xyz visual_rpy visual_scale rover_name">
+
+        <link name="${rover_name}_${chassis_name}">
+            <collision name="${rover_name}_${chassis_name}_collision">
+                <origin
+                    xyz="0 0 0"
+                    rpy="0 0 0"/> 
+               <geometry>
+                    <box size = "${chassis_collision_x} ${chassis_collision_y} ${chassis_collision_z}"/>
+                </geometry>
+            </collision>
+
+            <visual name="${rover_name}_${chassis_name}_visual">
+                <origin
+                    xyz="${visual_xyz}"
+                    rpy="${visual_rpy}"/>
+               <geometry>
+                    <mesh
+                        filename = "package://srcp2_models_final/${dae_path}"
+                        scale = "${visual_scale}"/>        
+                </geometry>
+            </visual>
+
+            <inertial>
+                <origin
+                    xyz="0 0 0"
+                    rpy="0 0 0"/> 
+                <mass value="${mass}"/>
+                <xacro:box_inertia
+                    m = "${mass}"
+                    x = "${chassis_collision_x}"
+                    y = "${chassis_collision_y}"
+                    z = "${chassis_collision_z}"/>
+            </inertial>
+        </link>
+
+        <link name="${rover_name}_base_footprint" />
+        <joint name="base_joint" type="fixed">
+            <origin
+                xyz="0 0 0"
+                rpy="0 0 0" />
+            <parent link="${rover_name}_base_footprint"/>
+            <child link="${rover_name}_${chassis_name}"/>
+        </joint>
+
+    </xacro:macro>
+</robot>

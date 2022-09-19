@@ -1,0 +1,11 @@
+<?xml version="1.0"?>setup_scout_1
+<launch> 
+<!-- Initial Setup -->
+
+<include file="$(find test_pkg)/launch/setup_team_1.launch"/>
+<include file="$(find test_pkg)/launch/setup_team_2.launch"/>
+
+<!--<node pkg="test_pkg" type="commander" name="commander" output="screen"/>-->
+
+
+</launch>

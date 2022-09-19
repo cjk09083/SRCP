@@ -1,0 +1,11 @@
+#
+# Space Robotics Simulation, Phase 2
+# Copyright (c) 2020, NASA-JSC. All Rights Reserved
+# Unauthorized copying or distribution of this code is strictly prohibited
+#
+string   joint    # name of joint
+float64  Kp
+float64  Ki
+float64  Kd
+---
+bool finished

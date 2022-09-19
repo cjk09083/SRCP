@@ -1,0 +1,8 @@
+prefix=/home/srcp2/cmp_workspace/install
+
+Name: srcp2_basic_solution
+Description: Description of srcp2_basic_solution
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

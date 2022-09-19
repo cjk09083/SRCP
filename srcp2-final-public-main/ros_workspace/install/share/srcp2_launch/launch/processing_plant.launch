@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, 2020, 2021
+    All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+    Spawn an instance of Processing_plant
+-->
+<launch>
+    <arg name="init_pose"   default="-x 0 -y 0 -z 0 -R 0 -P 0 -Y 0"/>
+
+    <param 
+        name    = "processing_plant_description"
+        command = "$(find xacro)/xacro $(find srcp2_models_final)/urdf/landers/processing/processing_plant.xacro"/>
+
+    <node name      = "spawn_processing_plant"
+            pkg     = "gazebo_ros"
+            type    = "spawn_model"
+            args    = "-param processing_plant_description -urdf -model processing_plant $(arg init_pose)"
+            respawn = "false"
+            output  = "screen" />
+</launch>

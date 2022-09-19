@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+
+<!--
+    @brief small hauler bin links and joints
+-->
+<robot name="small_hauler" xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <xacro:macro name="small_hauler_bin" params="rover_name parent">
+
+        <link name="${rover_name}_bin">
+            <visual name="${rover_name}_bin_visual">
+                <origin xyz="0 0 0" rpy="0 0 ${pi/2.0}"/>
+                <geometry>
+                    <mesh
+                        filename = "package://srcp2_models_final/meshes/rovers/small_hauler/bin.dae"
+                        scale    = "0.33 0.33 0.33"/>
+                </geometry>
+            </visual>
+            <collision name="${rover_name}_bin_collision">
+                <origin xyz="0 0 0" rpy="0 0 ${pi/2.0}"/>
+                <geometry>
+                    <mesh
+                        filename = "package://srcp2_models_final/meshes/rovers/small_hauler/bin.dae"
+                        scale    = "0.33 0.33 0.33"/>
+                </geometry>
+            </collision>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 ${pi/2.0}"/>
+                <mass value = "5.0"/>
+                <xacro:box_inertia
+                    m = "5.0"
+                    x = "1.0"
+                    y = "1.0"
+                    z = "0.25" />
+            </inertial>
+        </link>
+
+        <joint name="bin_joint" type="revolute">
+            <parent link="${parent}"/>
+            <child  link="${rover_name}_bin"/>
+            <origin xyz="0.4 0 0.1" rpy="0 0 0"/>
+            <axis
+                xyz = "0 1 0"
+                rpy = "0 0 0"/>
+            <limit
+                effort   = "1000"
+                velocity = "${pi/6}"
+                lower    = "0.0"
+                upper    = "${3.0*pi/4.0}"/>
+            <dymanics
+                damping  = "5.0"
+                friction = "5.0"/>
+        </joint>
+
+        <gazebo reference="${rover_name}_bin">
+            <!-- for debug reasons, this has been made red. comment this to restore default colors -->
+            <material>Gazebo/Red</material> 
+        </gazebo>
+
+        <gazebo reference="bin_joint">
+            <provideFeedback>true</provideFeedback>
+        </gazebo>
+            
+    </xacro:macro>
+</robot>

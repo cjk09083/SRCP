@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+  Test World Description
+-->
+<sdf version='1.6'>
+  <world name='default'>
+    <gravity>0 0 -1.62</gravity>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type='adiabatic'/>
+    
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <latitude_deg>0</latitude_deg>
+      <longitude_deg>0</longitude_deg>
+      <elevation>0</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+    <physics name='default' default='1' type='ode'>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <max_contacts>5</max_contacts>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>100</iters>
+        </solver>
+      </ode>
+    </physics>
+
+    <scene>
+      <ambient>50 50 50 1</ambient>
+      <background>0 0 0 1</background>
+      <origin_visual>0</origin_visual>
+      <grid>false</grid>
+    </scene>
+
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <pose frame=''>50 -20 20 0 0.5 2.5</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+
+    <include>
+      <uri>model://qa_terrain</uri>
+    </include>
+
+    <!-- Due to hard-coding, this has to be present for scout to spawn -->
+    <light type="spot" name="scout_1_spot">
+      <pose>0 0 0 0 0 0</pose>
+      <diffuse>1 1 1 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>10</range>
+        <linear>0.01</linear>
+        <constant>0.2</constant>
+        <quadratic>0.0</quadratic>
+      </attenuation>
+      <direction>0 0 -1</direction>
+      <spot>
+        <inner_angle>0</inner_angle>
+        <outer_angle>0</outer_angle>
+        <falloff>1.2</falloff>
+      </spot>
+    </light>
+
+    <plugin name="StartStopSimPlugin" filename="libStartStopSimPlugin.so">
+    </plugin>
+
+  </world>
+</sdf>

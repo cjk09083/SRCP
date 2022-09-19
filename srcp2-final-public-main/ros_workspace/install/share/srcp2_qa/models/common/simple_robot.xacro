@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	4-wheeled simple robot for testing plugins
+-->
+<robot name="simple_robot" 
+	xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+	<!-- _______________________________________________________________________________________________________________
+         General Includes
+    -->
+	<!-- todo: is this relative to THIS file or included file ?? -->
+	<xacro:include filename="properties.xacro" />
+	<xacro:include filename="materials.xacro" />
+	<xacro:include filename="macros.xacro" />
+	<xacro:include filename="simple_robot.gazebo" />
+
+	<!-- Part/Link xacros -->
+	<xacro:include filename="chassis.xacro" />
+	<xacro:include filename="wheel.xacro" />
+
+	<!-- Chassis -->
+	<xacro:chassis/>
+
+	<!-- Wheels -->
+	<wheel flbr="br" fb="-1" lr= "-1"/>
+	<wheel flbr="fl" fb="1" lr= "1" />
+	<wheel flbr="bl" fb="-1" lr= "1" />
+	<wheel flbr="fr" fb="1" lr= "-1"/>
+
+</robot>

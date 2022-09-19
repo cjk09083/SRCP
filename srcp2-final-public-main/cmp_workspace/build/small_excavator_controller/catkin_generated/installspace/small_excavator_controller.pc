@@ -1,0 +1,8 @@
+prefix=/home/srcp2/cmp_workspace/install
+
+Name: small_excavator_controller
+Description: Description of small_excavator_controller
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

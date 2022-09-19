@@ -1,0 +1,13 @@
+#
+# Space Robotics Simulation, Phase 2
+# Copyright (c) 2019, NASA-JSC. All Rights Reserved
+# Unauthorized copying or distribution of this code is strictly prohibited
+#
+# 
+# This service is called by competitors when they want to begin charging thier robots
+# It takes in a statement to start
+# Returns whether or not charging has been attempted
+
+bool begin_charging
+---
+bool charging_state

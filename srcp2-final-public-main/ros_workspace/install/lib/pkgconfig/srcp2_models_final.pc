@@ -1,0 +1,8 @@
+prefix=/home/srcp2/ros_workspace/install
+
+Name: srcp2_models_final
+Description: Description of srcp2_models_final
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

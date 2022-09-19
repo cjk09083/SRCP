@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <!--
+    Space Robotics Challenge (2)
+    NASA-JSC
+    Copyright (c) 2019, All Rights Reserved
+    Unauthorized distribution strictly prohibited
+
+    Launch Electrical System QA Test World and Robots
+  -->
+  <launch>
+
+    <arg name="use_gui"    default="false"/>
+    <arg name="paused"     default="false"/>
+    <arg name="robot_name" default="battery_bot"/>
+
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+      <arg name="world_name"   value="$(find srcp2_qa)/worlds/electrical_qa.world"/>
+      <arg name="paused"       value="$(arg paused)"/>
+      <arg name="gui"          value="$(arg use_gui)"/>
+      
+      <arg name="verbose"      value="true"/>
+      <arg name="use_sim_time" value="true"/>
+      <arg name="recording"    value="false"/>
+    </include>
+
+    <group ns="$(arg robot_name)">
+      <param name="robot_description" command="$(find xacro)/xacro $(find srcp2_qa)/models/electrical/battery_bot.xacro" />
+      <param name="tf_prefix" value="$(arg robot_name)_tf" />
+
+      <include file="$(find srcp2_launch)/launch/one_robot.launch">
+        <arg name="init_pose"        value="-x 1 -y 1 -z 1" />
+        <arg name="robot_name"       value="$(arg robot_name)" />
+        <arg name="spawn_rover_name" value="spawn_$(arg robot_name)" />
+      </include>
+  
+      <include file="$(find srcp2_qa)/launch/simple_robot_controller.launch">
+        <arg name="robot_name"                 value="$(arg robot_name)" />
+        <arg name="controller_spawner_name"    value="$(arg robot_name)_controller_manager" />
+        <arg name="node_name"                  value="$(arg robot_name)_control" />
+        <arg name="robot_state_publisher_name" value="$(arg robot_name)_state_publisher" />
+      </include>
+    </group>
+
+    <!-- <arg name="charging_station_name"         default="charging_bot"/>
+    <group ns="$(arg charging_station_name)">
+      <param name="robot_description" command="$(find xacro)/xacro $(find srcp2_qa)/models/electrical/charging_bot.xacro" />
+      
+      <include file="$(find srcp2_launch)/launch/one_robot.launch">
+        <arg name="init_pose"        value="-x 4 -y 0 -z 0.5" />
+        <arg name="robot_name"       value="$(arg charging_station_name)" />
+        <arg name="spawn_rover_name" value="spawn_$(arg charging_station_name)" />
+      </include>
+    </group> -->
+
+  </launch>

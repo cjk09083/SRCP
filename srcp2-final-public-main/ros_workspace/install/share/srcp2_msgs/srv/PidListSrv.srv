@@ -1,0 +1,8 @@
+#
+# Space Robotics Simulation, Phase 2
+# Copyright (c) 2020, NASA-JSC. All Rights Reserved
+# Unauthorized copying or distribution of this code is strictly prohibited
+#
+bool     show_list    # shows all current PIDs of the rover's joints
+---
+bool finished

@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!--
+       small rover electronics
+    -->
+    <xacro:macro name="small_rover_power" params="rover_name rover_type">
+
+        <xacro:property name="battery_collision_x" value="0.3"/>
+        <xacro:property name="battery_collision_y" value="0.5"/>
+        <xacro:property name="battery_collision_z" value="0.15"/>
+        
+        <xacro:include filename="../common/universal_battery.xacro"/>
+        <xacro:universal_battery 
+            name        = "battery"
+            parent_name = "${rover_name}_small_chassis"
+            offset_xyz  = "-0.4 0 0.1"
+            mass        = "5.0" 
+            rover_type  = "${rover_type}"/>
+
+        <xacro:property name="panel_mass"          value="5.0"/>
+        <xacro:property name="panel_collision_x"   value="0.5"/>
+        <xacro:property name="panel_collision_y"   value="0.5"/>
+        <xacro:property name="panel_collision_z"   value="0.01"/>
+
+        <xacro:include filename="../common/universal_solar_panel.xacro"/>
+        <xacro:universal_solar_panel
+            name        = "left_solar_panel" 
+            parent_name = "battery"
+            offset_xyz  = "-0.15 -0.4 0.2"/>
+
+        <xacro:universal_solar_panel
+            name        = "right_solar_panel"
+            parent_name = "battery"
+            offset_xyz  = "-0.15 0.4 0.2"/>
+    </xacro:macro>
+
+    <gazebo>
+        <plugin name="system_monitor" filename="libSystemMonitorPlugin.so">
+            <startup_power_save>false</startup_power_save>
+            <startup_percent_level>98.0</startup_percent_level>
+            <threshold_percent_emg>10.0</threshold_percent_emg>
+            <threshold_percent_low>25.0</threshold_percent_low>
+            <repair_heal_range>10.0</repair_heal_range>
+            <repair_model_name>repair_station</repair_model_name>
+            
+        </plugin>     
+    </gazebo>
+</robot>

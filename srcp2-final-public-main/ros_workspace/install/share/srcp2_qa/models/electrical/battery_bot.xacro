@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+-->
+<robot name="simple_robot" 
+	xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+	<!-- _______________________________________________________________________________________________________________
+         General Includes
+    -->
+	<!-- Load the base testing robot-->
+	<xacro:include filename="../common/simple_robot.xacro" />
+
+	<!-- Custom Plugins -->
+	<xacro:include filename="battery_bot.gazebo" />
+	<!-- support block to prop robot up -->
+	<xacro:include filename="support_block.xacro" />
+	<!-- charging port for simulating charging -->
+	<xacro:include filename="charging_port.xacro" />
+	
+	<support_block/>
+	<charging_port link_name="charging_port"/>
+
+</robot>

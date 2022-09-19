@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>srcp2_heightmap</name>
+  <version>0.0.0</version>
+  <description>The srcp2_heightmap generation package</description>
+  <maintainer email="redacted@nasa.gov">Jane Doe</maintainer>
+  <license>Copyright (c) NASA-JSC 2020, 2021, All Rights Reserved</license>
+  <buildtool_depend>catkin</buildtool_depend>
+</package>

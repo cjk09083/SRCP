@@ -1,0 +1,399 @@
+#! /usr/bin/env bash
+# 
+# Space Robotics Challenge, Phase 2
+# Copyright (c) 2019-2021, NASA-JSC. All Rights Reserved
+# Unauthorized Distribution Strictly Prohibited
+#
+
+# move to this directory
+_this_dir="$( cd "$(dirname "$0")" ; pwd -P )"
+pushd `pwd` > /dev/null 2>&1
+cd $_this_dir
+
+# Source helper scripts
+source "srcp2_setup.bash"
+source "gpu_and_x.bash"
+
+log_dir="$(cd ~; pwd)/.srcp2"
+image_tag="scheducation/srcp2_comp:final_competitor"
+container_name="srcp2-final"
+
+# simulation params
+run_endless="false"
+run_gui="true"
+sim_seed="42"
+use_noise="true"
+base_model_path=""
+use_lockstep=""
+
+# robot team config
+config_file="" # use default
+
+# developer
+dev_command=""
+host_gazebo_path=$(cd ~; pwd)/.gazebo
+host_ros_path=$(cd ~; pwd)/.ros
+
+# container constraints
+use_local="false"
+cpus=6
+mem="12g"
+
+# XServer
+xsock="/tmp/.X11-unix"
+xauth="/tmp/.docker.xauth"
+
+# Main SIM Ros Master Network Name
+simalias_name="simmaster"
+srcp2net_name="srcp2net"
+
+function help(){
+    echo -e "${B}Summary:${rs}
+
+    This script manages the docker containers necessary to run the Space 
+    Robotics Simulation (Final). It starts the Docker containers, and 
+    configures the host correctly for XServer forwarding.
+    
+    Note that all short-form options are case-sensitive
+
+${B}General Options:${rs}
+    
+    ${B}-h | --help${rs}
+        Show this message and quit
+
+    ${B}-C | --config-file${rs}
+        Absolute path (on host) to configuration YAML file. At minimum, this
+        file must contain the following fields:
+            ${b}team:${rs}
+                ${b}scouts:     ${rs}<integer-number-of-scouts>
+                ${b}excavators: ${rs}<integer-number-of-excavators>
+                ${b}haulers:    ${rs}<integer-number-of-haulers>
+
+        Other debug options are available, but these will be overriden at
+        scoring runtime. These are also subject to change without warning.
+        See the wiki for valid configuration file fields 
+
+    ${B}-s | --strict${rs}
+        Interpret the configuration strictly, according to the scoring rules
+        This will ignore all non-competitor configuration settings
+
+    ${B}-l | --log${rs}
+        Set the log directory path. Several logfiles are created as part of launching
+        the simulation, they live here. Defaults to ${b}$log_dir${rs}.
+    
+    ${B}-n | --no-gui${rs}
+        Run the the simulation in a headless mode, without the Gazebo GUI
+
+    ${B}-S | --sync${rs}
+        The lockstep sync feature allows the sensor update rate to be strictly followed. 
+        This means that on computers with different computing resources, 
+        the specified update rate can always be respected, allowing for sensor 
+        updates and physics to be in sync.
+ 
+${B}Dev and Testing Options${rs}
+    These are container commands and configuration that are used by
+    developers and testers. Competitors ${B}may${rs} use these for debugging, but 
+    will ${B}not${rs} be able to set them at scoring runtime.
+
+    ${B}-d | --dev${rs}
+        Use this to pass the appropriate build/test/run argument.
+        Valid arguments are:
+            ${b}build${rs}   -- build the codebase (and the deployment install)
+            ${b}clean${rs}   -- same as 'build', but force a clean build
+            ${b}install${rs} -- build the install version for competitor deployment
+            ${b}test${rs}    -- run all unit and integration tests
+            ${b}run${rs}     -- run the sim (same as running without --dev) 
+
+        Example: ${b}run_srcp2_final --dev build${rs}
+
+        ${y}Warning:${rs} Running this as a competitor is undefined and will
+        throw docker permission errors.
+
+    ${B}-L | --local-docker${rs}
+        Use the local versions of the docker images (if they exist). This overrides
+        the default behaviour, which is to search for updates each time this
+        script is run.
+
+   ${B}-i | --interactive${rs}
+        Simply launch as normal, but override all runtime args with
+        interactive BASH shell
+
+   ${B}-c | --cpus${rs}
+        Set number of CPUs available to this container. Default is ${cpus}
+
+   ${B}-m | --mem${rs}
+        Set GB of RAM available to this container. Default is ${mem}
+        Throttling this may result in undefined behavior
+
+   ${B}-D | --detach${rs}
+        Detach Option for Docker Run. 
+
+
+${B}Copyright${rs}
+    
+    Space Robotics Challange, Phase 2
+    Copyright (c) 2019, 2020, 2021, NASA-JSC. All Rights Reserved
+    Unauthorized Distribution Strictly Prohibited
+"
+}
+
+# ______________________________________________________________________________________________________________________
+echo_header
+echo -e "${B}From host system:${rs}\n"
+
+for arg in "$@"; do
+  shift
+  case "$arg" in
+    "--help")         set -- "$@" "-h" ;;
+    "--config-file")  set -- "$@" "-C" ;;
+    "--strict")       set -- "$@" "-s" ;; 
+    "--log")          set -- "$@" "-l" ;;
+    "--no-gui")       set -- "$@" "-n" ;;
+    "--sync")         set -- "$@" "-S" ;;
+    #
+    "--dev")          set -- "$@" "-d" ;;
+    "--local-docker") set -- "$@" "-L" ;;
+    "--interactive")  set -- "$@" "-i" ;;
+    #
+    "--cpus")         set -- "$@" "-c";;
+    "--mem")          set -- "$@" "-m";;
+    "--detach")       set -- "$@" "-D";;
+    *) set -- "$@" "$arg"
+  esac
+done
+
+OPTIND=1
+while getopts hC:sl:nd:Lic:m:SD arg; do
+    case $arg in
+
+        h)
+            help
+            exit 0
+            ;;
+        d)
+            image_tag="scheducation/srcp2_devel:final_developer"
+            dev_command=$OPTARG
+            ;;
+        l)
+            log_dir=$OPTARG
+            ;;
+        L)
+            use_local="true"
+            ;;
+        C)
+            config_file=$OPTARG
+            ;;
+        s)
+            strict="true"
+            ;;
+        n)
+            run_gui="false"
+            ;;
+        L)
+            use_local="true"
+            ;;
+        i)
+            interactive="-it"
+            override_command="/bin/bash"
+            ;;
+        c)
+            cpus=$OPTARG
+            ;;
+        m)
+            mem="${OPTARG}g"
+            ;;
+        S)
+            use_lockstep="--lockstep"
+            echo -e "$echo_ok using lockstep sync option for the simulation"
+            ;;
+        D)
+            detach_option="-d"
+            ;;
+        *)
+            echo -e "$echo_error input option '$arg' is not supported"
+            quit_with_popd 1
+            ;;
+    esac
+done
+
+if [ -z $config_file ]; then
+    echo -e "$echo_warn no config file set, using default"
+    config_file="<container-default>"
+    config_volume=""
+    config_env="--env SRCP2_CONFIG_FILE_PATH=/home/srcp2/config/config_defaults.yaml"
+else
+    if [ ! -f $config_file ]; then
+        echo -e "$echo_error unable to find config file ${b}$config_file${rs} on host"
+        exit 1
+    fi
+    config_volume="--volume $config_file:/home/srcp2/config/config_user.yaml"
+    config_env="--env SRCP2_CONFIG_FILE_PATH=/home/srcp2/config/config_user.yaml"
+    echo -e "$echo_ok found configuration YAML file"
+fi
+
+# nvidia checks
+if ! nvidia_host_check; then
+    echo -e "$echo_error Nvidia check fails"
+    exit 1
+fi
+echo -e "$echo_ok Checking Nvidia complete"
+
+# x-server
+if [[ "$run_gui" == "true" ]]; then
+    echo -e "$echo_ok Running with graphical GUI"
+else
+    echo -e "$echo_ok Running headless, no GUI will display"
+fi
+if ! x_host_setup; then
+    echo -e "$echo_error Host X-Server setup failed"
+    exit 1
+fi
+echo -e "$echo_ok XServer ok"
+
+# logging setup
+if [ -d $log_dir ]; then
+    if ! rm -rf $log_dir; then
+        echo -e "$echo_error Unable to remove old log dir at ${b}$log_dir${rs}"
+        exit 1
+    fi
+fi
+if ! mkdir -p $log_dir; then
+    echo -e "$echo_error unable to set up log directory ${b}$log_dir${rs}"
+    exit 1
+fi
+echo -e "$echo_ok logging setup complete"
+
+# update docker images
+if [[ "$use_local" == "false" ]]; then
+    if ! docker pull $image_tag; then
+        echo -e "$echo_error Docker pull failed"
+        exit 1
+    fi
+    echo -e "$echo_ok image update complete"
+else
+    echo -e "$echo_warn Using local versions of the docker images, will ${B}not${rs} check Dockerhub for updates"
+fi
+
+# mount src ros-workspace? (dev only)
+src_volumes=""
+cmp_volumes=""
+
+base_model_path="/home/srcp2/ros_workspace/install/share/srcp2_models_final/" # this is the path for competitors (default)
+#
+if [[ "$image_tag" == *"_dev"* ]]; then
+
+    src_host_path=$(cd ../../ros_workspace && pwd)
+    cmp_host_path=$(cd ../../cmp_workspace && pwd)
+    
+    if [[ ! -d $src_host_path ]]; then
+        echo -e "$echo_error This machine does not have access to sim source code. ${r}Cannot run as developer!${rs} Nice try"
+        exit 1
+    fi
+
+    if [[ ! -d $cmp_host_path ]]; then
+        echo -e "$echo_error This machine does not have access to cmp source code. ${r}Cannot run as developer!${rs} Nice try"
+        exit 1
+    fi
+
+    src_volumes="--volume=${src_host_path}:/home/srcp2/ros_workspace:rw"
+    cmp_volumes="--volume=${cmp_host_path}:/home/srcp2/cmp_workspace:rw"
+    base_model_path="/home/srcp2/ros_workspace/src/srcp2_models_final/"
+fi
+
+# Display run state information to user (dev and comp)
+echo
+echo -e "$echo_info running image:  ${b}$image_tag${rs}"
+echo -e "$echo_info container name: ${b}$container_name${rs}"
+echo -e "$echo_info runtime logs:   ${b}$log_dir${rs}"
+echo -e "$echo_info gazebo logs:    ${b}$host_gazebo_path${rs}"
+echo -e "$echo_info ros logs:       ${b}$host_ros_path${rs}"
+echo -e "$echo_info config file:    ${b}$config_file${rs}"
+
+if [ -z $interactive ]; then
+    echo
+    echo -e "$echo_info Simulation container started. Gazebo startup typically takes a few seconds"
+    echo -e "$echo_info run ${b}docker kill $container_name${rs} to stop, or await sim timeout"
+else
+    echo
+    echo -e "$echo_info Running in interactive mode. Starting a BASH shell..."
+fi
+
+echo
+echo -e "$echo_info Confirming Network Setup: ${b} Network Setup${rs}..."
+if ! docker network ls | grep -q "$srcp2net_name"; then
+    echo -e "$echo_info Setting up as ${b} Bridge $srcp2net_name${rs}"
+    docker network create --driver=bridge $srcp2net_name
+    echo 
+else
+    echo -e "$echo_info Existing network found: ${b}$srcp2net_name${rs}"
+fi
+echo -e "$echo_info Network Setup is now ${b} ready as $srcp2net_name${rs}..."
+echo
+
+echo  -e "${B}Cleaning up the .. Host Gazebo Paging Trash before we start it.${rs}"  
+rm -rf ${HOME}/.gazebo/paging/
+
+echo -e "${B}________________________________________________________________________________________________________________________${rs}"
+echo -e "${B}From Container:${rs}"
+echo
+docker run --rm $detach_option $interactive \
+    \
+    --name $container_name \
+    --env=TERM="xterm-256color" \
+    --tty \
+    --user 1001:1001 \
+    $interactive \
+    \
+    --env="DISPLAY"=$DISPLAY \
+    --volume="/etc/group:/etc/group:ro"   \
+    --volume="/etc/passwd:/etc/passwd:ro" \
+    --volume="/etc/shadow:/etc/shadow:ro" \
+    \
+    --env=XAUTHORITY=$xauth \
+    --volume=$xsock:$xsock:rw \
+    --volume=$xauth:$xauth:rw \
+    --volume=/dev/log:/dev/log:rw \
+    \
+    --gpus=all \
+    --device=/dev/dri:/dev/dri \
+    \
+    --privileged \
+    --network $srcp2net_name \
+    --network-alias $simalias_name \
+    \
+    --env=ROS_MASTER_URI="http://${simalias_name}:11311" \
+    --env=SRCP2_RUN_PACKAGE="srcp2_launch" \
+    --env=SRCP2_LAUNCH_FILE="final.launch" \
+    $config_volume \
+    $config_env \
+    \
+    $src_volumes \
+    $cmp_volumes \
+    --env SRCP2_DEV_OPTIONS=$dev_command \
+    \
+    --volume $host_ros_path:"/home/srcp2/.ros":rw \
+    --volume $host_gazebo_path:"/home/srcp2/.gazebo":rw \
+    --volume $log_dir:"/home/srcp2/logs":rw \
+    \
+    --cpus=$cpus \
+    --memory=$mem \
+    --memory-swap=$mem \
+    \
+    --env=ROS_HOME="/home/srcp2" \
+    --env=ROSCONSOLE_STDOUT_LINE_BUFFERED="1" \
+    \
+    --env=SRCP2_SYNC=$use_lockstep \
+    --env GAZEBO_MODEL_DATABASE_URI="" \
+    --env GAZEBO_MODEL_PATH=\
+"${base_model_path}":\
+"${base_model_path}terrains"\
+    \
+    --env GAZEBO_RESOURCE_PATH=\
+"${base_model_path}":\
+"${base_model_path}terrains":\
+"${base_model_path}terrains/lunar_heightmap/textures":\
+"/home/srcp2/.gazebo"\
+    \
+    $image_tag $override_command
+exit $?
+#"~/.gazebo"\

@@ -1,0 +1,2040 @@
+#!/usr/bin/env python3
+
+# Authors: Hongik #
+
+import math
+import os
+import select
+import sys
+
+import rospy
+import rosservice
+import tf
+import time
+import ctypes
+import struct
+import tf2_ros
+import imutils
+
+# import pcl
+
+# from ._pcl import *
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, PoseWithCovarianceStamped, PoseStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan, Imu, Image, PointCloud2, PointField, JointState
+from srcp2_msgs.msg import VolSensorMsg, ScoreMsg, SystemMonitorMsg
+from std_msgs.msg import Float64, Int32
+from tf.transformations import euler_from_quaternion
+from darknet_ros_msgs.msg import BoundingBoxes
+
+import sensor_msgs.point_cloud2 as pc2
+import numpy as np
+import numpy.linalg as lin
+
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+
+if os.name == 'nt':
+    import msvcrt
+else:
+    import tty, termios
+
+team_state = 0
+team_state_pub = rospy.Publisher("team_1/state", Int32, queue_size=1)
+# state_pub.publish(Int32(data=0))
+
+Robot_tag = "H1) "
+
+LINEAR_VEL = 0.22
+STOP_DISTANCE = 4.0
+STOP_DISTANCE_YOLO = 5.0
+LIDAR_ERROR = 0.1
+err_code = 0
+get_pose = True
+# get_pose = False
+
+SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR
+image_pub = rospy.Publisher('team_1/image_raw', Image, queue_size=10)
+
+pub = rospy.Publisher('small_hauler_1/skid_cmd_vel', Twist, queue_size=10)
+sensor_pitch = rospy.Publisher('small_hauler_1/sensor/pitch/command/position', Float64, queue_size=10)
+odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
+scan_pub = rospy.Publisher("scan", LaserScan, queue_size=10)
+bin_pub = rospy.Publisher("small_hauler_1/bin/command/position", Float64, queue_size=10)
+
+PoseWithCovarianceStamped_pub = rospy.Publisher("initialpose", PoseWithCovarianceStamped, queue_size=50)
+# rostopic pub /scout_1/sensor_controller/command std_msgs/Float64 "data: 0.5"
+
+FR_pub = rospy.Publisher("small_hauler_1/front_right_wheel/steer/command/position", Float64, queue_size=10)
+FL_pub = rospy.Publisher("small_hauler_1/front_left_wheel/steer/command/position", Float64, queue_size=10)
+BR_pub = rospy.Publisher("small_hauler_1/back_right_wheel/steer/command/position", Float64, queue_size=10)
+BL_pub = rospy.Publisher("small_hauler_1/back_left_wheel/steer/command/position", Float64, queue_size=10)
+
+fl_vel_pub = rospy.Publisher('small_hauler_1/front_left_wheel/drive/command/velocity', Float64, queue_size=10)
+fr_vel_pub = rospy.Publisher('small_hauler_1/front_right_wheel/drive/command/velocity', Float64, queue_size=10)
+bl_vel_pub = rospy.Publisher('small_hauler_1/back_left_wheel/drive/command/velocity', Float64, queue_size=10)
+br_vel_pub = rospy.Publisher('small_hauler_1/back_right_wheel/drive/command/velocity', Float64, queue_size=10)
+
+state_pub = rospy.Publisher("rover_state/hauler_1", ScoreMsg, queue_size=10)
+
+fr_float64 = Float64()
+fl_float64 = Float64()
+br_float64 = Float64()
+bl_float64 = Float64()
+
+turn_circle = 0
+turn_ratio = 0.5
+
+base_mode = 1
+
+fl_vel = 0
+fr_vel = 0
+bl_vel = 0
+br_vel = 0
+
+settings = termios.tcgetattr(sys.stdin)
+speed = math.pi * 4
+tnspeed = 1.0
+sigma = 4
+goal_x = 0
+goal_y = 0
+
+roll = 0
+pitch = 0
+yaw = 0
+
+start_y = 0.0
+start_x = 0.0
+start_z = 0.0
+start_roll = 0.0
+start_pitch = 0.0
+start_yaw = 0.0
+
+dt = 0.2
+A = np.array([[1, dt], [0, 1]])
+H = np.array([[1, 0]])
+Q = np.array([[0.001, 0], [0, 0.01]])
+R = 0.1
+P = 3 * np.eye(2)
+x_0 = 0.0
+xp = 0.0
+# xp2 = np.array([0, 0, 0])
+xp2 = 0
+
+call_step = 0
+
+yaw = 0.0
+yaw_d = 0.0
+yaw_o = 0.0
+center = 0.0
+center_of_cmd_x = 0.0
+width_raw = 0.0
+width_kf = 0.0
+distance = 0.0
+spoon_distance = 0.0
+
+base_x = -6.0
+base_y = 7.0
+base_z = 0.0
+
+cal_x = 0.0
+cal_y = 0.0
+cal_x2 = 0.0
+cal_y2 = 0.0
+x_point = 0
+y_point = 0
+angle_point = np.zeros((360, 2))
+angle_filter_size = 40
+points = np.zeros((angle_filter_size, 2))
+pitch_points = np.zeros((angle_filter_size, 1))
+
+slam = False
+slam_check = False
+center_check = True
+turn_to_goal = False
+find_object = True
+
+center_check_time = 0.0
+
+goal_set = 45
+goal = 1
+
+goal_point = [[base_x, base_y],
+              [-56, 46],  # 1 (1)
+              [-57, 13],  # 2
+              [2, 48],  # 3 (2)
+              [-23, 48],  # 4
+              [52, 33],  # 5 (3)
+              [28, 43],  # 6
+              [57, -49],  # 7 (4)
+              [0, -46],  # 8
+              [-42, -20],  # 9 (5)
+              [-58, -48],  # 10
+              [0, -46],  # 11
+              [0, 18], [16, 23], [30, 11],
+              [29, 0], [18, -13], [17, -26],
+              [0, -33], [-17, -28], [-20, -16],
+              [-22, -3], [-24, 9], [-15, 21]]
+
+dt = 0.2
+F = np.array([[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]])
+aX = 1
+G = np.array([[(dt * dt) / 2, 0], [0, (dt * dt) / 2], [dt, 0], [0, dt]])  # 4*2
+Qm = np.dot(np.dot(G, np.eye(2)), G.T)
+g_Xs = np.zeros((4, 1))
+g_Ps = np.eye(4)
+g_Ps[0, 0] = 100
+g_Ps[1, 1] = 100
+sensor_pitch_value = 10
+before_score_time = rospy.Time(0)
+
+base_center = 0
+base_y_center = 0
+base_rng = 0
+base_y_rng = 0
+
+rock_center = 0
+rock_rng = 0
+rock_y_center = 0
+rock_y_rng = 0
+rock_min = 0
+rock_max = 0
+rock_x_pose_min = 0
+rock_x_pose_max = 0
+rock_y_pose_min = 0
+rock_y_pose_max = 0
+
+v_index = 0
+vol_center = 0
+vol_y_center = 0
+vol_type = ""
+vol_rng = 0
+pre_vol_type = ""
+vol_index = 30
+pre_vol_index = 0
+vol_x = 0.0
+vol_y = 0.0
+vol_dis = 0.0
+vol_stop = False
+brake_data = 0.0
+vol_point = np.zeros((28, 5))
+# vol_type_array = np.empty((28, 1))
+# vol_type_array.astype(np.string_)
+vol_type_array = np.empty(28, dtype='<U16')
+# numpy.empty(10, dtype='s256')
+
+print(vol_type_array.dtype)
+
+hector_odom_x = 0.0
+hector_odom_y = 0.0
+
+odom_x = 0.0
+odom_y = 0.0
+odom_z = 0.0
+odom_roll = 0.0
+odom_pitch = 0.0
+odom_yaw = 0.0
+
+start_flag = 0
+
+imu_yaw = 0.0
+imu_pitch = 0.0
+imu_init = True
+
+far_from_base = [0.0, 0.0]
+
+object_index = 0
+object_distance = 0
+base_distance = 0
+
+object_x_center = 0
+object_y_center = 0
+
+object_x = 0.0
+object_y = 0.0
+object_z = 0.0
+
+true_object_x = -26.24
+true_object_y = 9.245
+true_object_z = 15.585
+
+true_base_x = 17.545
+true_base_y = -5.46
+true_base_z = 2.85
+
+object_locate_index = 0.0
+base_locate_index = 0.0
+object_size = 0.0
+base_size = 0.0
+
+angle_default = 0.0
+float64 = Float64()  # camera angle
+float64.data = angle_default
+
+marker_x_center = 0
+marker_x_range = 0
+marker_y_center = 0
+marker_y_range = 0
+
+find_object_time = 0.0
+bin_angle = 0.0
+
+score = 0
+calls = 0
+
+pre_obs_base_y = 0
+find_base_time = rospy.Time(0)
+
+imu_init = True
+
+bl_joint = 0.0
+GTG = False
+
+power_health = 0
+power_health_str = ""
+power_level = 100
+power_saver = False
+battery_mode = 0
+battery_mode_str = ""
+power_rate = 0.0
+solar_ok = 0
+
+image_mode = 3
+init_roll, init_pitch, init_yaw = 0, 0, 0
+station_center, station_y_center, station_width, station_height, station_y, station_x = 0, 0, 0, 0, 0, 0
+plant_center, plant_y_center, plant_width, plant_height, plant_x, plant_y = 0, 0, 0, 0, 0, 0
+hopper_center, hopper_y_center, hopper_width, hopper_height, hopper_x, hopper_y = 0, 0, 0, 0, 0, 0
+spoon_center, spoon_y_center, spoon_width, spoon_height, spoon_x, spoon_y = 0, 0, 0, 0, 0, 0
+rover_center, rover_y_center, rover_width, rover_height, rover_x, rover_y = 0, 0, 0, 0, 0, 0
+vol_center, vol_y_center, vol_width, vol_height, vol_x, vol_y = 0, 0, 0, 0, 0, 0
+
+height_kf = 0
+back_flag = 0
+
+
+def hauler_state_callback(data):
+    try:
+        global back_flag
+        # print("S1) team_state change ", data)
+        base_data = data.data
+        if base_data > 1:
+            back_flag = 22
+
+    except Exception as e:
+        global err_code
+        err_code = 4
+        print("need_base_callback except Error ", e)
+        pass
+
+
+def state_callback(data):
+    try:
+        global team_state, base_mode, center, center_check, \
+            turn_circle, GTG, goal_x, goal_y
+        # print("S1) team_state change ", data)
+        team_state = data.data
+
+        if team_state > 0:
+            GTG = True
+
+        if team_state == 4:
+            GTG = True
+            turn_circle = 1
+            print("H1) go to excavator_1")
+
+        elif team_state == 6: # Excavator가 Hauler를 바라보고 정렬
+            GTG = True
+            base_mode = 3
+            center_check = False
+            center = 600
+            turn_circle = 2
+            rospy.loginfo('Find Excavator!!!')
+
+        elif team_state == 8:
+            goal_x = 10
+            goal_y = 3
+
+        elif team_state == 9:
+            center_check = False
+            center = 600
+            base_mode = 1
+            rospy.loginfo('Find Station!!!')
+
+        elif team_state == 10:
+            goal_x = 4
+            goal_y = 10
+
+        elif team_state == 11:
+            base_mode = 2
+            turn_circle = 4
+            center_check = False
+            center = 600
+            print("H1) go to plant")
+
+        elif team_state == 12:
+            turn_circle = 6
+            print("H1) go to hooper")
+
+        elif team_state == 13:
+            if power_level > 60:
+                pub_excavator_state_control.publish(Int32(data=14))
+            else:
+                goal_x = 10
+                goal_y = 3
+
+    except Exception as e:
+        global err_code
+        err_code = 4
+        print("state except Error ", e)
+        pass
+
+
+def box(data):
+    try:
+        global station_center, station_y_center, station_width, station_height, station_x, station_y, \
+            plant_center, plant_y_center, plant_width, plant_height, plant_x, plant_y, \
+            hopper_center, hopper_y_center, hopper_width, hopper_height, hopper_x, hopper_y, \
+            spoon_center, spoon_y_center, spoon_width, spoon_height, spoon_x, spoon_y, \
+            rover_center, rover_y_center, rover_width, rover_height, rover_x, rover_y, \
+            vol_center, vol_y_center, vol_width, vol_height, vol_x, vol_y, spoon_distance
+
+        station_center = 0
+        station_y_center = 0
+        hopper_center = 0
+        plant_center = 0
+        spoon_center = 0
+        rover_center = 0
+        rover_width = 0
+        vol_center = 0
+        vol_y_center = 0
+        vol_y = 0
+        real_rover_width = 0
+        now_vol_min = 0
+
+        for box in data.bounding_boxes:
+
+            if box.id == 0: # 암석 장애물
+                if box.ymax > now_vol_min:  # 가장 가까이 있는 암석 판별
+                    vol_center = (box.xmax + box.xmin) / 2
+                    vol_y_center = (box.ymax + box.ymin) / 2
+
+                    vol_x = box.xmin
+                    vol_y = box.ymax
+                    vol_width = box.xmax - box.xmin
+                    vol_height = box.ymax - box.ymin
+
+            elif box.id == 1:  # Station
+                station_center = (box.xmax + box.xmin) / 2
+                station_y_center = (box.ymax + box.ymin) / 2
+
+                station_x = box.xmin
+                station_y = box.ymin
+                station_width = box.xmax - box.xmin
+                station_height = box.ymax - box.ymin
+
+            elif box.id == 2:  # Plant
+                plant_center = (box.xmax + box.xmin) / 2
+                plant_y_center = (box.ymax + box.ymin) / 2
+
+                plant_x = box.xmin
+                plant_y = box.ymin
+                plant_width = box.xmax - box.xmin
+                plant_height = box.ymax - box.ymin
+
+            # elif box.id == 3:  # Scout
+            #     rover_width = box.xmax - box.xmin
+            #     if rover_width > real_rover_width:
+            #         rover_center = (box.xmax + box.xmin) / 2
+            #         rover_y_center = (box.ymax + box.ymin) / 2
+            #
+            #         rover_x = box.xmin
+            #         rover_y = box.ymin
+            #         rover_height = box.ymax - box.ymin
+            #         real_rover_width = rover_width
+
+            elif box.id == 4:  # Hauler
+                rover_width = box.xmax - box.xmin
+                if rover_width > real_rover_width and rover_width > 80:
+                    rover_center = (box.xmax + box.xmin) / 2
+                    rover_y_center = (box.ymax + box.ymin) / 2
+
+                    rover_x = box.xmin
+                    rover_y = box.ymin
+                    rover_height = box.ymax - box.ymin
+                    real_rover_width = rover_width
+
+            elif box.id == 5:  # Excavator
+                rover_width = box.xmax - box.xmin
+                if rover_width > real_rover_width and rover_width > 80:
+                    rover_center = (box.xmax + box.xmin) / 2
+                    rover_y_center = (box.ymax + box.ymin) / 2
+
+                    rover_x = box.xmin
+                    rover_y = box.ymin
+                    rover_height = box.ymax - box.ymin
+                    real_rover_width = 640
+
+            elif box.id == 6:  # Spoon
+                spoon_center = (box.xmax + box.xmin) / 2
+                spoon_y_center = (box.ymax + box.ymin) / 2
+
+                spoon_x = box.xmin
+                spoon_y = box.ymin
+                spoon_width = box.xmax - box.xmin
+                spoon_height = box.ymax - box.ymin
+
+                # rover_distance = 48.4 - 2.29 * spoon_width + \
+                #                  0.0422 * math.pow(spoon_width, 2) - 2.63E-04 * math.pow(spoon_width, 3)
+                rover_distance = 133 * math.pow(spoon_width, -0.757)
+                spoon_distance = rover_distance - 2.371851613
+
+                # rover_center = (box.xmax + box.xmin) / 2
+                # real_rover_width = 640
+
+            elif box.id == 8:  # Hopper
+                hopper_center = (box.xmax + box.xmin) / 2
+                hopper_y_center = (box.ymax + box.ymin) / 2
+
+                hopper_x = box.xmin
+                hopper_y = box.ymin
+                hopper_width = box.xmax - box.xmin
+                hopper_height = box.ymax - box.ymin
+            # break
+
+            if rover_center > 0:
+                rover_center -= 18  # 64
+
+    except Exception as e:
+        global err_code
+        err_code = 4
+        print("box except Error ", e)
+        pass
+
+
+def image_callback(msg):
+    try:
+        global station_y, station_height, station_x, station_width, \
+            plant_y, plant_height, plant_x, plant_width, err_code, base_distance, base_mode, cal_x, cal_y, height_kf
+        #        frame = frame + 1
+
+        #        if frame % 1 == 0:
+
+        try:
+
+            if team_state > 5:
+                image_pub.publish(msg)
+
+            if base_mode < 3:
+                # Convert your ROS Image message to OpenCV2
+                bridge = CvBridge()
+                img_raw = bridge.imgmsg_to_cv2(msg, "bgr8")
+
+                if base_mode == 1:
+                    if station_center == 0:
+                        return
+                    img = img_raw[station_y: station_y + station_height, station_x: station_x + station_width]
+                    bgr_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                    hsv_img = cv2.cvtColor(bgr_img, cv2.COLOR_RGB2HSV)
+                    lower_orange = (0, 0, 133)
+                    upper_orange = (179, 15, 255)
+
+                ################ TEST CODE FOR PLANT ################
+                else:
+                    if plant_center == 0:
+                        return
+                    img = img_raw[plant_y: plant_y + plant_height, plant_x: plant_x + plant_width]
+                    bgr_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                    hsv_img = cv2.cvtColor(bgr_img, cv2.COLOR_RGB2HSV)
+                    lower_orange = (105, 94, 000)
+                    upper_orange = (122, 255, 200)
+
+                #####################################################
+
+                thresh = cv2.inRange(hsv_img, lower_orange, upper_orange)
+
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+
+                thresh_open = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
+                (x, y) = (0, 0)
+
+                roi = img[y: y + 360, x: x + 640]
+
+                cnt, _, stats, centroids = cv2.connectedComponentsWithStats(thresh_open)
+
+                a = np.array(stats)
+
+                stats = a.tolist()
+
+                stats.sort(key=lambda n: n[4], reverse=True)
+
+                if cnt == 1:
+                    (x, y, w, h, s) = stats[0]
+
+                else:
+                    (x, y, w, h, s) = stats[1]
+
+                if 100 < s < 20000:
+                    cv2.rectangle(img, (x, y, w, h), (0, 255, 0), 2)
+
+                # image_ori = imutils.resize(img, width=640)
+                # cv2.imshow("ROI", roi)
+                # cv2.imshow('ori', img)
+                # cv2.imshow('ORI_image', image_ori)
+                # cv2.imshow('result', thresh)
+                # cv2.imshow('open_result', thresh_open)
+                cv2.waitKey(25)
+                # cap.release()
+                # cv2.destroyAllWindows()
+                # cv2.waitKey(10)
+                # print("height: ", h)
+
+                if base_mode == 1:
+                    cal_distance = 858 / h + 3.675
+                    # print("distance to station : ", cal_distance)
+
+                else:
+                    cal_h = 1000 / h
+                    # cal_distance = 312 / (h ^ 0.8)
+                    cal_distance = 2261.3 / h - 0.9453
+                    # print("distance to plant : ", cal_distance)
+
+                height_kf = h
+
+                base_distance = float(kf(cal_distance)[0][0])
+                if base_distance > 0:
+                    cal_x = -cal_distance * math.cos(imu_yaw)
+                    cal_y = -cal_distance * math.sin(imu_yaw)
+
+                # cv2.waitKey('q')
+        # except BaseException as e:
+        except CvBridgeError as e:
+            err_code = 6
+            print("image callback except Error_in")
+            print(e)
+            pass
+    except Exception as e:
+        err_code = 6
+        print("image callback except Error_out : ", e)
+        pass
+
+
+def system_monitor(system_msg):
+    try:
+        global power_health, power_level, power_saver, battery_mode, \
+            battery_mode_str, solar_ok, power_rate, power_health_str
+
+        power_health = system_msg.power_health
+        if battery_mode == 1:
+            power_health_str = "Low Power"
+        elif battery_mode == 2:
+            power_health_str = "Emergency"
+        else:
+            power_health_str = "OK"
+        power_level = system_msg.power_level
+        power_saver = system_msg.power_saver
+        battery_mode = system_msg.battery_mode
+        if battery_mode == 1:
+            battery_mode_str = "Charge High"
+        elif battery_mode == 2:
+            battery_mode_str = "Charge NORMAL"
+        elif battery_mode == 3:
+            battery_mode_str = "Charge SLOW"
+        elif battery_mode == 4:
+            battery_mode_str = "Discharge HIGH"
+        elif battery_mode == 5:
+            battery_mode_str = "Discharge NORMAL"
+        elif battery_mode == 6:
+            battery_mode_str = "Discharge SLOW"
+        elif battery_mode == 7:
+            battery_mode_str = "Discharge CONSERVE"
+        elif battery_mode == 8:
+            battery_mode_str = "Repair Fast Charge"
+        else:
+            battery_mode_str = "NO Charge"
+        solar_ok = system_msg.solar_ok
+        power_rate = system_msg.power_rate
+
+        # rospy.loginfo('S1) Found!!! type : %s, D : %.1fm (x : %.1f, y : %.1f)',
+        #               vol_type, vol_dis, odom_x, odom_y)
+
+    except Exception as e:
+        global err_code
+        err_code = 3
+        print("vol_callback except Error : ", e)
+        pass
+
+
+def get_joint(joint_data):
+    global bl_joint
+    bl_joint = joint_data.position[1]
+
+
+def move_con(go, turn):
+    global fl_vel, fr_vel, bl_vel, br_vel, fr_float64, fl_float64, br_float64, bl_float64, turn_ratio
+
+    turn = turn * 1.25
+
+    turn_ratio = 2.0
+
+    if center_check:
+        turn_ratio2 = 0.3
+    else:
+        turn_ratio2 = 0.4
+        if team_state == 6 and rover_center < 600:
+            turn_ratio2 = 0.2
+        elif team_state > 9 and center < 600:
+            turn_ratio2 = 0.2
+
+    if turn > 0:
+        if abs(turn) > 0.8 or (team_state == 6 and not center_check):
+            fr_float64 = math.pi / 4
+            fl_float64 = - math.pi / 4
+            br_float64 = - math.pi / 4
+            bl_float64 = math.pi / 4
+            fl_vel = math.pi * turn * turn_ratio2
+            fr_vel = -math.pi * turn * turn_ratio2
+            bl_vel = math.pi * turn * turn_ratio2
+            br_vel = -math.pi * turn * turn_ratio2
+        else:
+            fr_float64 = 0
+            fl_float64 = 0
+            br_float64 = 0
+            bl_float64 = 0
+            turn = turn * turn_ratio
+            fl_vel = turn + go
+            fr_vel = -turn + go
+            bl_vel = turn + go
+            br_vel = -turn + go
+
+    elif turn < 0:
+        if abs(turn) > 0.8 or (team_state == 6 and not center_check):
+            fr_float64 = math.pi / 4
+            fl_float64 = - math.pi / 4
+            br_float64 = - math.pi / 4
+            bl_float64 = math.pi / 4
+            fl_vel = math.pi * turn * turn_ratio2
+            fr_vel = -math.pi * turn * turn_ratio2
+            bl_vel = math.pi * turn * turn_ratio2
+            br_vel = -math.pi * turn * turn_ratio2
+        else:
+            fr_float64 = 0
+            fl_float64 = 0
+            br_float64 = 0
+            bl_float64 = 0
+            turn = turn * turn_ratio
+            fl_vel = turn + go
+            fr_vel = -turn + go
+            bl_vel = turn + go
+            br_vel = -turn + go
+
+    # elif turn_circle == 2:
+    #     width = 1.5748
+    #     length = 1.87325
+    #     base_range = base_distance - 1.5
+    #     fr_float64 = -(math.radians(90) - math.atan2(length, base_range - (width / 2)))
+    #     fl_float64 = -math.radians(90)
+    #     br_float64 = -(math.radians(90) - math.atan2(length, base_range + (width / 2)))
+    #     bl_float64 = -math.radians(90)
+    #     fr_float64 = go
+    #     fl_float64 = go
+    #     br_float64 = go
+    #     bl_float64 = go
+    else:
+        fl_vel = go
+        fr_vel = go
+        bl_vel = go
+        br_vel = go
+        fr_float64 = 0
+        fl_float64 = 0
+        br_float64 = 0
+        bl_float64 = 0
+
+    fr_vel_pub.publish(fl_vel)
+    fl_vel_pub.publish(fr_vel)
+    br_vel_pub.publish(bl_vel)
+    bl_vel_pub.publish(br_vel)
+    FR_pub.publish(fr_float64)
+    FL_pub.publish(fl_float64)
+    BR_pub.publish(br_float64)
+    BL_pub.publish(bl_float64)
+
+
+def odom_gen(scout1_data):
+    global start_x, start_y, start_z, start_roll, start_pitch, start_yaw, \
+        imu_init, init_roll, init_pitch, init_yaw
+
+    start_pose = scout1_data.pose
+    init_x = start_pose.position.x
+    init_y = start_pose.position.y
+    init_z = start_pose.position.z
+
+    start_x, start_y, start_z = init_x, init_y, init_z
+
+    list_orientation = [start_pose.orientation.x, start_pose.orientation.y,
+                        start_pose.orientation.z, start_pose.orientation.w]
+    init_roll, init_pitch, init_yaw = euler_from_quaternion(list_orientation)
+
+    start_yaw = start_yaw - math.degrees(imu_yaw - init_yaw)
+    start_pitch = start_pitch - math.degrees(imu_pitch - init_pitch)
+    print("H1) Set true pose")
+    reset_odom_service_name = '/small_hauler_1/reset_odom_to_pose'
+    reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+    reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+    reset_odom_srv_client(init_x, init_y, init_z, init_roll, init_pitch, init_yaw)
+    # reset_odom_srv_client(1.99, 3.99, 1.645138, init_roll, init_pitch, init_yaw)
+
+    imu_init = False
+
+
+def srv_enable_robot_position_callback(robot_name, data):
+    rospy.wait_for_service(robot_name + '/get_true_pose')
+    try:
+        print("Get true pose Service call")
+        pose_service_name = robot_name + '/get_true_pose'
+        pose_srv_class = rosservice.get_service_class_by_name(pose_service_name)
+        pose_srv_client = rospy.ServiceProxy(pose_service_name, pose_srv_class)
+        robot_pos = pose_srv_client(data)
+        # robot_position_srv = rospy.ServiceProxy(robot_name+'/get_true_pose', LocalizationSrv)
+        # robot_pos = robot_position_srv(data)
+        print(robot_pos)
+        odom_gen(robot_pos)
+        return robot_pos
+    except rospy.ServiceException as e:
+        print("Get true pose Service call failed: %s" % e)
+
+        print("H1 set init pose")
+        reset_odom_service_name = '/small_hauler_1/reset_odom_to_pose'
+        reset_odom_srv_class = rosservice.get_service_class_by_name(
+            reset_odom_service_name)
+        reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name,
+                                                   reset_odom_srv_class)
+        reset_odom_srv_client(1.99, 3.99, 1.645138, -0.000550, 0.004040, 0.782026)
+        pass
+
+
+def imu_callback(incomming_msg):
+    try:
+        list_orientation = [incomming_msg.orientation.x, incomming_msg.orientation.y,
+                            incomming_msg.orientation.z, incomming_msg.orientation.w]
+        rolls, pitchs, yaws = euler_from_quaternion(list_orientation)
+        global imu_yaw, imu_pitch, points, angle_point, start_yaw, imu_init, start_pitch
+        yaw_or = math.radians(math.degrees(yaws) + start_yaw)
+
+        point = np.array([math.cos(yaw_or), math.sin(yaw_or)])
+
+        N_size = angle_filter_size
+        global x_point, y_point
+        x_point = 0
+        y_point = 0
+        pitch_sum = 0
+        for i in range(N_size, 1, -1):
+            points[i - 1] = points[i - 2]
+            pitch_points[i - 1] = pitch_points[i - 2]
+            x_point = x_point + points[i - 1][0]
+            y_point = y_point + points[i - 1][1]
+            pitch_sum = pitch_sum + pitch_points[i - 1]
+        points[0] = point
+        pitch_points[0] = pitchs
+        x_point = x_point + points[0][0]
+        y_point = y_point + points[0][1]
+        pitch_sum = pitch_sum + pitch_points[0]
+        # print(points[0])
+        # rospy.loginfo(Robot_tag+"point is [%f , %f]", point[0], point[1])
+
+        x_point = x_point / N_size
+        y_point = y_point / N_size
+        if imu_init:
+            init_yaw = math.atan2(y_point, x_point)
+            init_pitch = pitch_sum / N_size
+            if points[N_size - 1][0] != 0:
+                # if start_yaw == 0:
+                start_yaw = start_yaw - (math.degrees(init_yaw) - yaw_d)
+                start_yaw = math.degrees(0.783999)
+                start_pitch = start_pitch - (math.degrees(init_pitch) - math.degrees(pitch))
+                imu_init = False
+
+        else:
+            imu_pitch = pitch_sum / N_size
+            imu_yaw = math.atan2(y_point, x_point)
+    except ValueError as e:
+        global err_code
+        err_code = 1
+        print("imu_callback except Error", e)
+        pass
+
+
+def odom_callback(odom_data):
+    try:
+        global start_flag, odom_x, odom_y, odom_z, odom_roll, odom_pitch, odom_yaw, roll, pitch, yaw, yaw_d, \
+            start_x, start_y, start_z, start_roll, start_pitch, start_yaw, speed
+        now_pose = odom_data.pose.pose
+        odom_x = now_pose.position.x
+        odom_y = now_pose.position.y
+        odom_z = now_pose.position.z
+
+        list_orientation = [now_pose.orientation.x, now_pose.orientation.y,
+                            now_pose.orientation.z, now_pose.orientation.w]
+        odom_roll, odom_pitch, odom_yaw = euler_from_quaternion(list_orientation)
+
+        if odom_yaw != 0:
+            roll = odom_roll
+            pitch = odom_pitch
+            yaw = odom_yaw
+            yaw_d = math.degrees(odom_yaw)
+            # if math.degrees(pitch) < -10:
+            #     speed = speed + 0.1
+            # else:
+            #     speed = 2.0
+
+        if start_flag == 0:
+            start_flag = 1
+            start_x = odom_x
+            start_y = odom_y
+            start_z = odom_z
+
+        #     scout_1_pos = srv_enable_robot_position_callback('/scout_1',True)
+        #     odom_gen(scout_1_pos)
+    except Exception as e:
+        global err_code
+        err_code = 2
+        print("odom_callback except Error")
+        pass
+
+
+def e1_state_callback(state_msg):
+    global goal_x, goal_y, GTG, turn_circle
+    try:
+        robot_type = state_msg.score
+        state_e1 = state_msg.masses_collected_kg
+        goalpose_x = state_e1[0]
+        goalpose_y = state_e1[1]
+        ref_yaw = state_e1[4]
+        rev_state = state_e1[9]
+
+        if goalpose_x != 0 and team_state < 5:
+            GTG = True
+            # goal_x = goalpose_x - 5 * math.cos(ref_yaw)
+            # goal_y = goalpose_y - 5 * math.sin(ref_yaw)
+            goal_x = goalpose_x
+            goal_y = goalpose_y
+
+        elif goalpose_x != 0 and team_state == 14:
+            # goal_x = goalpose_x - 5 * math.cos(ref_yaw)
+            # goal_y = goalpose_y - 5 * math.sin(ref_yaw)
+            goal_x = goalpose_x
+            goal_y = goalpose_y
+        # elif team_state == 8 or team_state == 10:
+        #     goal_x = goalpose_x + 1.5 * math.cos(ref_yaw)
+        #     goal_y = goalpose_y + 1.5 * math.sin(ref_yaw)
+
+    except Exception as e:
+        global err_code
+        err_code = 1
+        print("State except Error", e)
+        pass
+
+
+def goal_callback(odom_data):
+    try:
+        global goal_x, goal_y, GTG
+        now_pose = odom_data.pose.pose
+        goalpose_x = now_pose.position.x
+        goalpose_y = now_pose.position.y
+        list_orientation = [now_pose.orientation.x, now_pose.orientation.y,
+                            now_pose.orientation.z, now_pose.orientation.w]
+        ref_roll, ref_pitch, ref_yaw = euler_from_quaternion(list_orientation)
+
+        # if goalpose_x != 0:
+        #     GTG = True
+        #     goal_x = goalpose_x
+        #     goal_y = goalpose_y
+        #     if turn_circle > 0:
+        #         goal_x = goalpose_x + 5 * math.cos(ref_yaw)
+        #         goal_y = goalpose_y + 5 * math.sin(ref_yaw)
+
+    except Exception as e:
+        global err_code
+        err_code = 2
+        print("goal_callback except Error", e)
+        pass
+
+
+def kf(x_new):
+    try:
+        global xp, P, R
+        Pp = np.dot(np.dot(A, P), A.T) + Q
+        K = np.dot(np.dot(Pp, H.T), lin.inv(np.dot(np.dot(H, Pp), H.T) + R))
+        x = xp + K * (x_new - np.dot(H, xp))
+        P = Pp - np.dot(np.dot(K, H), Pp)
+        xp = x
+        return x
+    except Exception as e:
+        global err_code
+        err_code = 5
+        return x_new
+
+
+def kf2(x_new):
+    try:
+        global xp2, P, R
+        Pp = np.dot(np.dot(A, P), A.T) + Q
+        K = np.dot(np.dot(Pp, H.T), lin.inv(np.dot(np.dot(H, Pp), H.T) + R))
+        x = xp2 + K * (x_new - np.dot(H, xp2))
+        P = Pp - np.dot(np.dot(K, H), Pp)
+        xp2 = x
+        return x
+    except Exception as e:
+        global err_code
+        err_code = 5
+        return x_new
+
+
+class Obstacle:
+    def __init__(self):
+        # self._cmd_pub = rospy.Publisher('scout_1/skid_cmd_vel', Twist, queue_size=1)
+        self.obstacle()
+
+    def getKey(self):
+        if os.name == 'nt':
+            return msvcrt.getch()
+        tty.setraw(sys.stdin.fileno())
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if rlist:
+            key = sys.stdin.read(1)
+        else:
+            key = ''
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+        return key
+
+    def cmd_check(self, target_linear_vel, target_angular_vel, turtlebot_moving):
+        try:
+            key = self.getKey()
+            global goal_x, goal_y, slam, goal, center_check, center, turn_to_goal, find_object_time, \
+                fr_float64, fl_float64, br_float64, bl_float64, find_object, object_x_center, turn_circle, speed, \
+                fl_vel, fr_vel, bl_vel, br_vel, sensor_pitch_value, GTG, bin_angle, base_mode, image_mode
+
+            if key == '+':
+                GTG = False
+                fl_vel = speed
+                fr_vel = speed
+                bl_vel = speed
+                br_vel = speed
+                fr_float64 = 0
+                fl_float64 = 0
+                br_float64 = 0
+                bl_float64 = 0
+                print("go : ", speed)
+            elif key == '-':
+                GTG = False
+                fl_vel = -speed
+                fr_vel = -speed
+                bl_vel = -speed
+                br_vel = -speed
+                fr_float64 = 0
+                fl_float64 = 0
+                br_float64 = 0
+                bl_float64 = 0
+                print("back : ", speed)
+            elif key == '7':
+                GTG = False
+                fl_vel = speed * turn_ratio
+                fr_vel = -speed * turn_ratio
+                bl_vel = speed * turn_ratio
+                br_vel = -speed * turn_ratio
+                fr_float64 = math.pi / 4
+                fl_float64 = - math.pi / 4
+                br_float64 = - math.pi / 4
+                bl_float64 = math.pi / 4
+                print("left : ", speed)
+            elif key == '9':
+                GTG = False
+                fl_vel = -speed * turn_ratio
+                fr_vel = speed * turn_ratio
+                bl_vel = -speed * turn_ratio
+                br_vel = speed * turn_ratio
+                fr_float64 = math.pi / 4
+                fl_float64 = - math.pi / 4
+                br_float64 = - math.pi / 4
+                bl_float64 = math.pi / 4
+                print("right : ", speed)
+            elif key == 'g':
+                GTG = True
+                rospy.loginfo('H1) Go to goal!!')
+            elif key == 'j':
+                goal_x = goal_x - 10
+                rospy.loginfo('H1) goal is %d, %d', goal_x, goal_y)
+            elif key == 'l':
+                goal_x = goal_x + 10
+                rospy.loginfo('H1) goal is %d, %d', goal_x, goal_y)
+            elif key == 'i':
+                goal_y = goal_y + 10
+                rospy.loginfo('H1) goal is %d, %d', goal_x, goal_y)
+            elif key == 'k':
+                goal_y = goal_y - 10
+                rospy.loginfo('H1) goal is %d, %d', goal_x, goal_y)
+            elif key == 'o':
+                sensor_pitch_value = sensor_pitch_value - 1
+                angle = math.radians(sensor_pitch_value)
+                sensor_pitch.publish(angle)
+                print("angle up : ", angle)
+            elif key == 'p':
+                sensor_pitch_value = sensor_pitch_value + 1
+                angle = math.radians(sensor_pitch_value)
+                sensor_pitch.publish(angle)
+                print("angle down : ", angle)
+            elif key == 'y':
+                bin_angle = math.radians(90)
+                bin_pub.publish(Float64(data=bin_angle))
+                print("H1) bin angle : ", bin_angle)
+            elif key == 'u':
+                bin_angle = 0.0
+                bin_pub.publish(Float64(data=bin_angle))
+                print("H1) bin angle : ", bin_angle)
+            elif key == '1':
+                GTG = True
+                turn_circle = 1
+                print("H1) go to excavator_1 : ", bin_angle)
+            elif key == '3':
+                GTG = True
+                base_mode = 2
+                turn_circle = 4
+                goal_x = 4
+                goal_y = 8
+                print("H1) go to plant : ", turn_circle)
+            elif key == 'z':
+
+                center_check = False
+                center = 600
+                base_mode = 1
+                rospy.loginfo('Find base!!!')
+            elif key == 'e':
+                image_mode = 2
+                rospy.loginfo('Excavator yolo!!!')
+            elif key == 'r':
+                image_mode = 3
+                rospy.loginfo('Hauler yolo!!!')
+            elif key == '0':
+                base_mode = 3
+                center_check = False
+                center = 600
+                turn_circle = 2
+                rospy.loginfo('Find Excavator!!!')
+            elif key == ' ' or key == '5':
+                turn_circle = 0
+                center_check = True
+                GTG = False
+                fl_vel = 0
+                fr_vel = 0
+                bl_vel = 0
+                br_vel = 0
+                fr_float64 = 0
+                fl_float64 = 0
+                br_float64 = 0
+                bl_float64 = 0
+                print("stop : ", speed)
+            elif key == 'q':
+                rospy.loginfo('H1) Quit!!')
+                quit()
+                # os.system("")
+                rospy.signal_shutdown("Quit signal")
+
+            return target_linear_vel, target_angular_vel, turtlebot_moving
+        except Exception as e:
+            global err_code
+            if err_code == 0:
+                err_code = 8
+            rospy.loginfo('H1) Quit signal!!')
+            rospy.loginfo('H1) Quit signal!!')
+            rospy.loginfo('H1) Quit signal!!')
+            rospy.loginfo('H1) Quit signal!!')
+            rospy.loginfo('H1) get key error!!')
+            rospy.loginfo('H1) get key error!!')
+            rospy.loginfo('H1) get key error!!')
+            rospy.loginfo('H1) get key error!!')
+            rospy.loginfo('H1) get key error!!')
+            rospy.loginfo('H1) get key error!!')
+            return target_linear_vel, target_angular_vel, turtlebot_moving
+            pass
+
+    def cal(self, x, y, z, angle, dis, gradient, dt, twists):
+        global err_code
+        try:
+            # x_pose,y_pose,z_pose=self.cal(x_pose,y_pose,z_pose,angle,interval*1.5,0)
+            if dt == 0:
+                dt = 0.1
+                err_code = 9
+                print("cal dt zero Error")
+            theta = math.radians(angle)
+            alpha = gradient
+            ran = dis / sigma
+            r_dot = ran * math.cos(alpha)
+            x_dot = r_dot * math.cos(theta)
+            y_dot = r_dot * math.sin(theta)
+            z_dot = ran * math.sin(alpha)
+            x = x + x_dot
+            y = y + y_dot
+            z = z - z_dot
+
+            velEst = np.array([x_dot / dt, y_dot / dt])
+
+            return x, y, z, velEst
+        except Exception as e:
+            err_code = 9
+            print("cal except Error")
+            return x, y, z, 0.0
+
+    def obstacle(self):
+        global turn_to_goal, vol_rng, goal_x, goal_y, center_check, slam_check, goal, dt, start_flag, \
+            base_x, base_y, goal_point, center, speed, far_from_base, err_code, vol_dis, vol_stop, brake_data, \
+            fr_float64, fl_float64, br_float64, bl_float64, vol_point, float64, find_object_time, \
+            find_object, call_step, object_x_center, marker_x_center, turn_circle, \
+            slam, GTG, base_mode, bin_angle, sensor_pitch_value, back_flag
+
+        auto_start = False
+
+        twist = Twist()
+
+        turning = False
+        pre_turn = False
+        turtlebot_moving = False
+        GTG = False
+        boundary = False
+
+        step_goal = False
+        reset_odom = False
+        center_before = 0
+        angle_range = range(0, 100)  # 0~100 is 0~180 degree,
+        target_linear_vel = 0.0
+        target_angular_vel = 0.0
+        clock = rospy.get_time()
+        current_time = rospy.Time.now()
+        last_time = rospy.Time.now()
+        x_pose = start_x
+        y_pose = start_y
+        z_pose = start_z
+        interval = 0.0
+        angle = 0.0
+        target_x = 0
+        target_y = 0
+        target_angle = 0
+        obs_flag = 0
+        turn_flag = 0
+        center_check = True
+        center_check_flag = 0
+        object_check_flag = 0
+        pre_x_pose = 0.0
+        pre_y_pose = 0.0
+        pre_yaw = 0.0
+        light_data_f = 1.0
+        center_chk_time = rospy.Time.now()
+        hooper_chk_time = 0
+
+        move_wait_time = rospy.Time.now()
+        wait_x_pose = 0.0
+        wait_y_pose = 0.0
+        pre_center = 0.0
+        base_flag = 0
+        first_found_object_flag = 0
+        pre_fl_float64 = 0
+        before_call_time = rospy.Time.now()
+        find_time = 80.0
+        forward_time = 30.0
+        go_time = find_time + forward_time
+        get_pose_result = 0
+        backward_flag = 0
+        time_offset = 0.0
+        recall_time = 0.0
+        hopper_mode = 0
+        float64.data = 0.35
+        charge_flag = 0
+
+        while not rospy.is_shutdown():
+            # rospy.loginfo('H1) rospy.is_shutdown()? %s', rospy.is_shutdown())
+            try:
+                # rospy.loginfo('H1) Try start')
+
+                # pub2.publish(float64)
+                pre_mindistance = 200
+                pre_index = 0
+                min_distance = 200
+                index = 0
+                target_linear_vel, target_angular_vel, turtlebot_moving = \
+                    self.cmd_check(target_linear_vel, target_angular_vel, turtlebot_moving)
+                try:
+                    scan = rospy.wait_for_message('small_hauler_1/laser/scan', LaserScan, timeout=1)
+                except rospy.ROSException as e:
+                    # rospy.loginfo('H1) Timeout while waiting for scan info')
+                    # rospy.logerr("Timeout while waiting for scan info!")
+                    err_code = 15
+                    raise e
+
+                con_ref = 35
+                con = con_ref
+                obs_start = 0
+                obs_index = 0
+                obs_end = 0
+                angle_add = 0
+                turn_dir = 0
+                pre_turn_dir = 0
+                obs_i = []
+                obs_r = [float('inf') for _ in angle_range]
+                max_con = 0
+                pre_lidar_distances = 0
+                pre2_lidar_distances = 0
+
+                max_distance = 9.5
+
+                max_i = 0
+                avoid_ref = 45
+                too_close = 0
+                tc_start = 0
+                tc_end = 0
+                turning = False
+                con_end = False
+                # rospy.loginfo('H1) Try scan check')
+
+                rover_distance = 0.0
+                rover_points = 0
+                far_from_base = [x_pose - base_x, y_pose - base_y]
+
+                for i in angle_range:
+                    lidar_distances = scan.ranges[i]
+
+                    if not turning and base_mode < 3:
+                        #  CONTINUITY
+                        if i >= 99:
+                            con += con_ref
+                        if not con_end and lidar_distances != 0:
+                            if lidar_distances < 1:
+                                if tc_start == 0:
+                                    tc_start = i
+                                too_close = too_close + 1
+                                tc_end = i
+                            if con == 0:
+                                obs_start = i
+                            if abs((pre2_lidar_distances + pre_lidar_distances) / 2
+                                   - (pre_lidar_distances + lidar_distances) / 2) < 2:
+                                con = con + 1
+                            else:
+                                con_end = True
+                        else:
+                            if con > max_con:
+                                max_con = con
+                            # if 15 < con < 95:
+                            #     rospy.loginfo('H1) Continous %d : MAX is %d , i: %d !!', con, max_con, i)
+                            if 15 < con < con_ref:
+                                for con_index in range(obs_start, i):
+                                    # obs_i.append(con_index)
+                                    obs_r[con_index] = scan.ranges[con_index]
+                                min_distance = pre_mindistance
+                                if min_distance < STOP_DISTANCE:
+                                    index = pre_index
+                                    # rospy.loginfo('H1) Find obs %f !!', obs_index)
+
+                                    rospy.loginfo('H1) Find obs con %d to %d !! r=%f, i=%f',
+                                                  obs_start, i, min_distance, index)
+                                    obs_index = obs_index + 1
+                                    pre_mindistance = 200
+                                    max_i = i
+                                    if team_state < 4:
+                                        turning = True
+                                    if abs(math.degrees(odom_pitch)) > 10:  # too H/L angle don't turn
+                                        rospy.loginfo('H1) Too H/L angle : %f', math.degrees(odom_pitch))
+                                        # turning = False
+                            con = 0
+                            con_end = False
+                        if pre_mindistance > lidar_distances:
+                            pre_mindistance = lidar_distances
+                            pre_index = i
+                            # rospy.loginfo('H1) LOW! %f, %f', min_distance,i)
+                    pre2_lidar_distances = pre_lidar_distances
+                    pre_lidar_distances = lidar_distances
+
+                    if turn_circle > 0 and lidar_distances < 2.5:
+                        rover_distance += lidar_distances
+                        rover_points += 1
+
+                if 250 < vol_center < 390 and team_state > 6 and not turn_to_goal: # 220 < vol_center < 420
+                    # y_min = vol_y_center-(.5*vol_height)
+                    if abs(vol_y) > 230:
+                        turning = True
+                        step_goal = True
+                        step_ref = 5
+                        if vol_center < 320:
+                            turn_yaw = math.radians(yaw_d - 30)
+                        else:
+                            turn_yaw = math.radians(yaw_d + 30)
+                        goal_x = x_pose + step_ref * math.cos(turn_yaw)
+                        goal_y = y_pose + step_ref * math.sin(turn_yaw)
+                        index = (640 - vol_center) * (100 / 640)
+
+                    rospy.loginfo('H1) Found vol (yolo)!! Xcenter:%d, Ymin:%d, width:%d, height:%d, angle:%d',
+                                  vol_center, vol_y, vol_width, vol_height, index)
+
+                if rover_points > 0:
+                    rover_distance = rover_distance/rover_points
+
+                if turtlebot_moving or GTG:
+                    target_linear_vel = speed
+
+                if turning:
+                    rospy.loginfo('H1) Turn_flag up!! : %f', turn_flag)
+                    if turn_flag < 3:
+                        turning = False
+                    turn_flag = turn_flag + 1
+                    if turn_flag > 10:
+                        turn_flag = 10
+                else:
+                    # rospy.loginfo('H1) Turn_flag do!! : %f', turn_flag)
+                    turn_flag = turn_flag - 1
+                    if turn_flag < 0:
+                        turn_flag = 0
+
+                # rospy.loginfo('H1) Check!! Turning : %d, GTG : %d, TM : %d, CC : %d, TTG : %d, SLAM : %d',
+                #               turning, GTG, turtlebot_moving, center_check, turn_to_goal, slam_check)
+
+                if turning and center_check and (GTG or turtlebot_moving) and not turn_to_goal:
+
+                    turn_ref = 40
+                    angle_add = 10
+                    turn_spd = tnspeed * (50 - abs(index - 50)) / 20
+                    # rospy.loginfo('H1) Try Avoid')
+                    if index < 50:
+                        # turn_spd = tnspeed * abs(index-50) / 10
+                        if turn_spd < 1:
+                            turn_spd = 1
+
+                        if turn_flag > 9:
+                            step_goal = True
+                            obs_yaw = yaw_d + (index - 50) * 74 / 50
+                            turn_yaw = math.radians(obs_yaw + 50)
+                            goal_x = x_pose + 10 * math.cos(turn_yaw)
+                            goal_y = y_pose + 10 * math.sin(turn_yaw)
+                            turn_flag = 0
+                        index = max_i
+                        rospy.loginfo('H1) Left Avoid angle is %d to %d ', 50 - turn_ref - angle_add, 50 - turn_ref)
+
+                        if (50 - turn_ref) > index > (50 - turn_ref - angle_add):
+                            target_linear_vel = speed
+                            turn_speed = 0.3
+                            turn_flag = turn_flag - 1
+                            rospy.loginfo('H1) Enough left turn go!! %f speed : %f', index, turn_speed)
+
+                        else:
+                            target_linear_vel = -0.1
+                            if too_close > 5:
+                                target_linear_vel = -1
+                            turn_speed = turn_spd
+                            rospy.loginfo('H1) Turn left avoid!! %f speed : %f', index, turn_speed)
+                    else:
+                        if turn_spd < 1:
+                            turn_spd = 1
+                        if turn_flag > 9:
+                            step_goal = True
+                            obs_yaw = yaw_d + (index - 50) * 74 / 50
+                            turn_yaw = math.radians(obs_yaw - 50)
+                            goal_x = x_pose + 10 * math.cos(turn_yaw)
+                            goal_y = y_pose + 10 * math.sin(turn_yaw)
+                            turn_flag = 0
+                        index = obs_start
+                        rospy.loginfo('H1) Right Avoid angle is %d to %d ', 50 + turn_ref, 50 + turn_ref + angle_add)
+
+                        if (50 + turn_ref + angle_add) > index > (50 + turn_ref):
+                            target_linear_vel = speed
+                            turn_speed = -0.3
+                            turn_flag = turn_flag - 1
+                            rospy.loginfo('H1) Enough right turn go!! %f speed : %f', index, turn_speed)
+                        else:
+                            target_linear_vel = -0.1
+                            if too_close > 5:
+                                target_linear_vel = -1
+                            turn_speed = -turn_spd
+                            rospy.loginfo('H1) Turn right avoid !! %f speed : %f', index, turn_speed)
+                            boundary = True
+                            turn_dir = 2
+                    rospy.loginfo('H1) avoid!')
+                    twist.linear.x = target_linear_vel
+                    twist.angular.z = turn_speed
+                    # interval = rospy.get_time() - clock
+                    # clock = rospy.get_time()
+                    current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                    dt = (current_time - last_time).to_sec()
+                    if dt == 0:
+                        err_code = 13
+                        dt = 0.1
+                        rospy.loginfo('H1) dt Zero Error!!! %d ', err_code)
+
+                    if abs(twist.angular.z) > 0.8:
+                        fr_float64.data = 0.78
+                        fl_float64.data = -0.78
+                        br_float64.data = -0.78
+                        bl_float64.data = 0.78
+                    else:
+                        fr_float64.data = 0.0
+                        fl_float64.data = 0.0
+                        br_float64.data = 0.0
+                        bl_float64.data = 0.0
+
+                    # angle = angle + turn_speed * interval
+                    angle = yaw_d
+                    x_pose, y_pose, z_pose, velEst = self.cal(x_pose, y_pose, z_pose, angle,
+                                                              dt * target_linear_vel, pitch, dt, twist)
+                    rospy.loginfo('H1) Distance : %f , angle : %f ', min_distance, index * 1.48)
+                else:
+                    angle = yaw_d
+
+                    # rospy.loginfo('H1) Try Go')
+                    if GTG:
+                        target_x = goal_x - x_pose
+                        target_y = goal_y - y_pose
+                        target_angle = math.degrees(math.atan2(target_y, target_x))
+                        turn_angle = target_angle - angle
+
+                        if turn_angle > 180:
+                            turn_angle = turn_angle - 360
+                        elif turn_angle < -180:
+                            turn_angle = turn_angle + 360
+
+                        turn_spd = tnspeed * abs(turn_angle) / 20
+                        if turn_spd > tnspeed:
+                            turn_spd = tnspeed
+                        elif turn_spd < 0.3:
+                            turn_spd = 0.3
+
+                        if 0 < turn_angle:
+                            target_angular_vel = turn_spd
+                            rospy.loginfo('H1) Turn left!! angle : %d , speed : %f', turn_angle, turn_spd)
+                            if turn_angle < 5:
+                                target_linear_vel = speed
+                                turn_to_goal = False
+                            else:
+                                target_linear_vel = 0
+                                turn_to_goal = True
+
+                        if turn_angle < 0:
+                            rospy.loginfo('H1) Turn right!! angle : %d , speed : %f', turn_angle, -turn_spd)
+                            target_angular_vel = -turn_spd
+                            if turn_angle > -5:
+                                target_linear_vel = speed
+                                turn_to_goal = False
+                            else:
+                                target_linear_vel = 0
+                                turn_to_goal = True
+
+                        reach_ref = 7
+                        if team_state > 4 and team_state != 14:
+                            reach_ref = 0.5
+                        elif team_state == 4:
+                            reach_ref = 5
+                        # elif team_state == 13:
+                        #     reach_ref = 7
+
+                        if math.sqrt(math.pow(target_x, 2) + math.pow(target_y, 2)) < reach_ref:
+                            rospy.loginfo('H1) Reach Goal  %d, %d ', goal_x, goal_y)
+
+                            stuck_flag = 0
+                            target_linear_vel = 0
+                            target_angular_vel = 0
+
+                            # if turn_circle == 4:
+                            #     if hopper_center > 0:
+                            #         turn_circle = 5
+                            #     else:
+                            #         base_mode = 2
+                            #         center_check = False
+                            #         center = 10
+                            # elif turn_circle == 1:
+                            #     turn_circle = 2
+
+                            if team_state == 4:
+                                team_state_pub.publish(Int32(data=5))
+
+                            if team_state == 8:
+                                team_state_pub.publish(Int32(data=9))
+
+                            if team_state == 10:
+                                team_state_pub.publish(Int32(data=11))
+
+                            if team_state == 13:
+                                center_check = False
+                                center = 600
+                                base_mode = 1
+                                rospy.loginfo('Find Station!!!')
+
+                            if team_state == 15:
+                                team_state_pub.publish(Int32(data=0))
+
+                            if step_goal:
+                                step_goal = False
+                                goal_x = goal_point[goal][0]
+                                goal_y = goal_point[goal][1]
+                                if team_state == 8:
+                                    goal_x = 10
+                                    goal_y = 3
+                            #
+                            # else:
+                            #     goal += 1
+                            #     goal_x = goal_point[goal][0]
+                            #     goal_y = goal_point[goal][1]
+                            #     print("Go to next point")
+
+                    twist.linear.x = target_linear_vel
+                    twist.angular.z = target_angular_vel
+                    # interval = rospy.get_time() - clock
+                    # clock = rospy.get_time()
+                    current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                    dt = (current_time - last_time).to_sec()
+                    if dt == 0:
+                        err_code = 14
+                        dt = 0.1
+                        rospy.loginfo('H1) dt Zero Error!!! %d ', err_code)
+                    if base_mode == 1:
+                        if station_center > 0:
+                            center = station_center
+                        base_x = -6.0
+                        base_y = -6.0
+                    elif base_mode == 2:
+                        if plant_center > 0:
+                            center = plant_center
+                        base_x = -6.0
+                        base_y = 7.0
+
+                    if team_state == 6:
+                        rospy.loginfo('Find Excavator center : %f, before : %f, rover c:%d, w:%d',
+                                      center, center_before, rover_center, rover_width)
+                        if rover_center > 0:
+                            center = rover_center
+
+                        if center == center_before and rover_center == 0 and center != 600:
+                            center = 600
+                        # if spoon_center > 0:
+                        #     center = spoon_center
+
+                    center_before = center
+
+                    distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+
+                    if not center_check and center < 640:
+                        ttg = True
+                        # float64.data = 0.2
+                        turn_angle = 10
+                        rospy.loginfo('Find center : %f, time : %f', center,
+                                      (current_time - center_chk_time).to_sec())
+                        move_wait_time = current_time
+                        if pre_center != center:
+                            center_chk_time = current_time
+                        pre_center = center
+                        twist.linear.x = 0.0
+
+                        if center_check_flag > 0:
+                            rospy.loginfo('========== Center_check_flag : %d,  time : %f ==========',
+                                          center_check_flag, (current_time - center_found_time).to_sec())
+
+                        if center < 318:
+                            twist.angular.z = tnspeed * (320 - center) / 60
+                            if twist.angular.z > tnspeed:
+                                twist.angular.z = tnspeed
+                            elif twist.angular.z < 0.2:
+                                twist.angular.z = 0.2
+                            rospy.loginfo('Find center : left %f', twist.angular.z)
+                        elif center > 322:
+                            twist.angular.z = tnspeed * -(center - 320) / 60
+                            if twist.angular.z < -tnspeed:
+                                twist.angular.z = -tnspeed
+                            elif twist.angular.z > -0.2:
+                                twist.angular.z = -0.2
+                            rospy.loginfo('Find center : right %f', twist.angular.z)
+                        else:
+                            rospy.loginfo('Found center %d : %f ', center_check_flag, center)
+
+                            if center_check_flag == 0:
+                                center_found_time = current_time
+
+                            center_check_flag = center_check_flag + 1
+                            twist.linear.x = 0.0
+
+                            if center_check_flag > 3 and (current_time - center_found_time).to_sec() > 3.5:
+                                if base_distance < 40 and base_mode == 1:
+                                    x_pose = base_x + cal_x
+                                    y_pose = base_y + cal_y
+
+                                    rospy.loginfo('S1) Reset Odom from base !! '
+                                                  'x : %f, y : %f, z : %f, yaw : %f, pitch : %f ',
+                                                  x_pose, y_pose, z_pose, imu_yaw, imu_pitch)
+                                    reset_odom_service_name = '/small_hauler_1/reset_odom_to_pose'
+                                    reset_odom_srv_class = rosservice.get_service_class_by_name(
+                                        reset_odom_service_name)
+                                    reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name,
+                                                                               reset_odom_srv_class)
+                                    reset_odom_srv_client(x_pose, y_pose, z_pose, roll, imu_pitch, imu_yaw)
+
+                                    if team_state == 9:
+                                        team_state_pub.publish(Int32(data=10))
+
+                                    elif team_state == 13:
+                                        team_state_pub.publish(Int32(data=14))
+
+                                else:
+                                    # if team_state == 6:
+                                    #     team_state_pub.publish(Int32(data=7))
+                                    base_mode = 1
+                                    fr_float64 = 0
+                                    fl_float64 = 0
+                                    br_float64 = 0
+                                    bl_float64 = 0
+
+                                    if turn_circle == 2:
+                                        turn_circle = 3
+                                        GTG = True
+
+                                    if team_state == 11:
+                                        team_state_pub.publish(Int32(data=12))
+
+                                center_check = True
+                                ttg = False
+                                center_check_flag = 0
+                                center = 640
+                                twist.angular.z = 0.0
+                                twist.angular.x = 0.0
+                                stuck_flag = 0
+
+                        if (current_time - center_chk_time).to_sec() > 60:
+                            center = 640
+                            ttg = False
+                            center_check = True
+                    elif team_state > 10 and distance_from_base < 20:
+
+                        if turn_circle > 4 and (distance_from_base < 7 or rover_points > 5):
+                            turn_circle = 7
+                            twist.linear.x = speed * 0.5
+                            twist.angular.z = 0
+
+                            if hooper_chk_time == 0:
+                                hooper_chk_time = current_time
+                            elif (current_time - hooper_chk_time).to_sec() > 30:
+                                hopper_mode = 3
+                                twist.linear.x = 0.0
+                                turn_circle = 0
+                                base_mode = 1
+
+                            elif (current_time - hooper_chk_time).to_sec() > 25:
+                                hopper_mode = 2
+                                twist.linear.x = -speed
+                                bin_angle = 0.0
+                                bin_pub.publish(Float64(data=bin_angle))
+                                print("H1) bin angle down: ", bin_angle)
+
+                            elif (current_time - hooper_chk_time).to_sec() > 20:
+                                hopper_mode = 1
+                                twist.linear.x = 0.0
+                                bin_angle = math.radians(90)
+                                bin_pub.publish(Float64(data=bin_angle))
+                                print("H1) bin angle up : ", bin_angle)
+                            rospy.loginfo('=============Hooper send c: %d, d : %f, t: %d, m:%d =============',
+                                          (plant_center - hopper_center), distance_from_base,
+                                          (current_time - hooper_chk_time).to_sec(), hopper_mode)
+                        elif turn_circle == 7:
+                            rospy.loginfo('=============Center ALIGNED  c: %d, d : %f =============',
+                                          (plant_center - hopper_center), base_distance)
+                            twist.linear.x = speed * 0.5
+                            twist.angular.z = 0
+
+                            if hopper_mode > 1:
+                                turn_circle = 0
+                                base_mode = 1
+                                hopper_mode = 0
+                                center_check = True
+                                if team_state == 12:
+                                    team_state_pub.publish(Int32(data=13))
+
+                        elif turn_circle > 4:
+                            if hopper_mode > 1:
+                                turn_circle = 0
+                                base_mode = 1
+                                hopper_mode = 0
+                                center_check = True
+                                if team_state == 12:
+                                    team_state_pub.publish(Int32(data=13))
+
+                            if center < 314 and turn_circle == 5:
+                                twist.angular.z = tnspeed * (320 - center) / 60
+                                if twist.angular.z > tnspeed:
+                                    twist.angular.z = tnspeed
+                                elif twist.angular.z < 0.1:
+                                    twist.angular.z = 0.1
+                                rospy.loginfo('Find plant_center : left %f', twist.angular.z)
+                            elif center > 327 and turn_circle == 5:
+                                twist.angular.z = tnspeed * -(center - 320) / 60
+                                if twist.angular.z < -tnspeed:
+                                    twist.angular.z = -tnspeed
+                                elif twist.angular.z > -0.1:
+                                    twist.angular.z = -0.1
+                                rospy.loginfo('Find plant_center : right %f', twist.angular.z)
+                            else:
+                                rospy.loginfo('Found plant_center : %f', center)
+                                turn_circle = 6
+                                twist.angular.z = 0.0
+                                twist.angular.x = 0.0
+                                if 327 < hopper_center:
+                                    twist.angular.z = tnspeed * -(hopper_center - 320) / 60
+                                    if twist.angular.z < -tnspeed:
+                                        twist.angular.z = -tnspeed
+                                    elif twist.angular.z > -0.1:
+                                        twist.angular.z = -0.1
+                                    rospy.loginfo('=============Turn cirle right1  % d=============',
+                                                  hopper_center)
+                                    rospy.loginfo('=============Turn cirle right1  % d=============',
+                                                  hopper_center)
+                                elif hopper_center < 314:
+                                    twist.angular.z = tnspeed * (320 - hopper_center) / 60
+                                    if twist.angular.z > tnspeed:
+                                        twist.angular.z = tnspeed
+                                    elif twist.angular.z < 0.1:
+                                        twist.angular.z = 0.1
+                                    rospy.loginfo('=============Turn cirle left1  % d=============',
+                                                  hopper_center)
+                                    rospy.loginfo('=============Turn cirle left1  % d=============',
+                                                  hopper_center)
+                                else:
+                                    rospy.loginfo('=============Center ALIGNED  c: %d, d : %f =============',
+                                                  (center - hopper_center), base_distance)
+                                    turn_circle = 7
+                                    twist.linear.x = speed * 0.6
+                    elif turn_circle > 3 and distance_from_base > 20:
+                        if turn_circle > 4:
+                            turn_circle = 4
+
+                # rospy.loginfo('H1) Try Go')
+                if team_state == 6 and center_check:
+                    twist.linear.x = speed * 0.5
+                    twist.angular.z = 0
+
+                    if rover_points > 10 and rover_distance < 1.9:
+                        rospy.loginfo('H1) STOP')
+                        team_state_pub.publish(Int32(data=7))
+                        if twist.linear.x > 0:
+                            twist.linear.x = 0
+
+                elif team_state == 7:
+                    twist.linear.x = 0
+                    twist.angular.z = 0
+
+                elif team_state == 5:
+                    twist.linear.x = 0
+                    twist.angular.z = 0
+
+                elif team_state == 14:
+                    if base_distance < 9.9:
+                        twist.linear.x = 0
+                        twist.angular.z = 0
+                        charge_flag += 1
+                        if charge_flag > 2:
+                            team_state_pub.publish(Int32(data=15))
+                            charge_flag = 0
+                    else:
+                        twist.linear.x = speed * 0.5
+                        twist.angular.z = 0
+
+                if team_state == 14 or team_state == 13:
+                    if sensor_pitch_value > -5:
+                        sensor_pitch_value = sensor_pitch_value - 0.5
+                        angle = math.radians(sensor_pitch_value)
+                        sensor_pitch.publish(angle)
+
+                else:
+                    if sensor_pitch_value < 10:
+                        sensor_pitch_value = sensor_pitch_value + 0.5
+                        angle = math.radians(sensor_pitch_value)
+                        sensor_pitch.publish(angle)
+
+                if back_flag > 0:
+                    back_flag -= 1
+                    twist.linear.x = - speed * 0.5
+                    twist.angular.z = 0
+
+                if GTG or not center_check:
+                    move_con(twist.linear.x, twist.angular.z)
+                    rospy.loginfo('H1) GTG go : %.1f, turn %.1f ', twist.linear.x, twist.angular.z)
+                else:
+                    fr_vel_pub.publish(fl_vel)
+                    fl_vel_pub.publish(fr_vel)
+                    br_vel_pub.publish(bl_vel)
+                    bl_vel_pub.publish(br_vel)
+                    FR_pub.publish(fr_float64)
+                    FL_pub.publish(fl_float64)
+                    BR_pub.publish(br_float64)
+                    BL_pub.publish(bl_float64)
+
+                # rospy.loginfo('H1) -------------Check flag-------------')
+                if odom_x != 0.0 and odom_y != 0.0 and odom_yaw != 0.0:
+                    x_pose = odom_x
+                    y_pose = odom_y
+                    z_pose = odom_z
+
+                # if (yaw == pre_yaw) and pre_x_pose != 0 and imu_yaw != 0:
+                #     reset_odom_service_name = '/small_hauler_1/reset_odom_to_pose'
+                #     reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+                #     reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+                #     reset_odom_srv_client(pre_x_pose, pre_y_pose, z_pose, roll, imu_pitch, imu_yaw)
+                #     rospy.loginfo('H1) Reset Odom!! x : %f, y : %f, z : %f, yaw : %f, pitch : %f ',
+                #                   pre_x_pose, pre_y_pose, z_pose, imu_yaw, imu_pitch)
+
+                # rospy.loginfo('H1) Check Odom!! %d ', goal)
+
+                if abs(imu_yaw - yaw) > 0.1:
+                    rospy.loginfo('H1) Reset!! start : %.3f(%.1f), imu : %.3f(%.1f), odom : %.3f(%.1f), diff : %.3f',
+                                  math.radians(start_yaw), start_yaw, imu_yaw, math.degrees(imu_yaw),
+                                  yaw, yaw_d, abs(imu_yaw - yaw))
+                    try:
+                        reset_odom_service_name = '/small_hauler_1/reset_odom_to_pose'
+                        reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+                        reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+                        if abs(x_pose) < 0.1 and abs(y_pose) < 0.1 and abs(z_pose) < 0.1:
+                            rospy.loginfo('H1) Reset with start odom %.1f', start_x)
+                            # reset_odom_srv_client(start_x, start_y, start_z, init_roll, init_pitch, init_yaw)
+                        else:
+                            reset_odom_srv_client(x_pose, y_pose, z_pose, roll, imu_pitch, imu_yaw)
+                    except rospy.ServiceException as e:
+                        print("Set odom Service call failed: %s" % e)
+
+                if reset_odom:
+                    rospy.loginfo('H1) ============= Need Reset Odom =============')
+
+                # if hopper_center > 0:
+                #     rospy.loginfo('H1) Plant distance %.2f, hopper ratio = %.1f (%d/%d)',
+                #                   far_from_base, hopper_width / hopper_height, hopper_width, hopper_height)
+                if turn_circle > 0 or base_mode > 0:
+                    rospy.loginfo('H1) Spoon C:%d, W:%d, D:%.2f, Excavator C:%d, W:%d, D:%.2f(%d)',
+                                  spoon_center, spoon_width, spoon_distance,
+                                  rover_center, rover_width, rover_distance, rover_points)
+                rospy.loginfo('From base M:%d, X : %.2f , Y : %.2f center : %d & d : %f, w : %.1f',
+                              base_mode, base_x + cal_x, base_y + cal_y, center, base_distance, height_kf)
+                rospy.loginfo('H1) Goal is %.1f, %.1f, target yaw is %.2f, step:%s, circle:%d GTG:%d',
+                              goal_x, goal_y, target_angle, step_goal, turn_circle, GTG)
+                rospy.loginfo('H1) X:%.2f, Y:%.2f, Z:%.1f, yaw:%d (%d, %.2f), pit:%.1f, bat:%d, State:%d',
+                              x_pose, y_pose, z_pose, yaw_d, math.degrees(imu_yaw),
+                              imu_yaw, sensor_pitch_value, power_level, team_state)
+
+                if slam:
+                    rospy.loginfo('H1) Go to next point !!! %d ', goal)
+
+                if get_pose_result > 0:
+                    rospy.loginfo('H1) ========== Get_pose_result %d !!! ==========', get_pose_result)
+
+                last_time = current_time
+
+                state_data = ScoreMsg()
+                state_data.header = scan.header
+                state_data.header.frame_id = "small_hauler_1_state_data"
+                state_data.score = 2
+                state_data.masses_collected_kg = [x_pose, y_pose, z_pose, sensor_pitch_value,
+                                                  imu_yaw, yaw, goal_x, goal_y, power_level]
+                state_pub.publish(state_data)
+
+                pre_x_pose = x_pose
+                pre_y_pose = y_pose
+                pre_yaw = yaw
+                # rospy.loginfo('H1) rospy.is_shutdown()? 2 %s', rospy.is_shutdown())
+
+            except Exception as e:
+                err_code = 10
+                print("H1) Obstacle except Error", e)
+                pass
+        rospy.loginfo('H1) Ros is shutdown!!!! %s', rospy.is_shutdown())
+
+
+def shut_down():
+    print("Ros is shutdown!! code : %d " % err_code)
+
+
+def main():
+    if os.name != 'nt':
+        settings = termios.tcgetattr(sys.stdin)
+    rospy.init_node('turtlebot3_teleop')
+    rospy.on_shutdown(shut_down)
+
+    just_debug = False
+
+    sleep_second = 60
+
+    global angle_point, before_score_time, vol_type_array
+    before_score_time = rospy.Time.now()
+
+    for i in range(0, 360):
+        line = [math.cos(math.radians(i)), math.sin(math.radians(i))]
+        angle_point[i] = line
+
+    rospy.loginfo(vol_type_array)
+    image_topic = "/small_hauler_1/camera/right/image_raw"
+    # Set up your subscriber and define its callback
+    rospy.Subscriber(image_topic, Image, image_callback)
+    rospy.Subscriber('/darknet_ros/bounding_boxes_t1', BoundingBoxes, box)
+    rospy.Subscriber('team_1/state', Int32, state_callback)
+    rospy.Subscriber('team_1/hauler_state', Int32, hauler_state_callback)
+
+    # Set up your subscriber and define its callback
+    rospy.Subscriber('small_hauler_1/odom', Odometry, odom_callback)
+    # rospy.Subscriber('small_excavator_1/odom', Odometry, goal_callback)
+
+    rospy.Subscriber('small_hauler_1/imu', Imu, imu_callback)
+    rospy.Subscriber("small_hauler_1/joint_states", JointState, get_joint)
+    # light_srv_client("%s" % light_data)
+    rospy.Subscriber('small_hauler_1/system_monitor', SystemMonitorMsg, system_monitor)
+    rospy.Subscriber('rover_state/excavator_1', ScoreMsg, e1_state_callback)
+
+    rospy.loginfo('H1) Ros is start!!!! %s', rospy.is_shutdown())
+
+    brake_service_name = '/small_hauler_1/brake_rover'
+    brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+    brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+    # brake_result = brake_srv_client(brake_data)
+
+    light_data = 0.0
+    spot_light_service_name = '/small_hauler_1/spot_light'
+    spot_light_srv_class = rosservice.get_service_class_by_name(spot_light_service_name)
+    spot_light_srv_client = rospy.ServiceProxy(spot_light_service_name, spot_light_srv_class)
+    spot_light_srv_client(light_data)
+
+    saver_data = True  # stop / low / high
+    saver_service_name = '/small_hauler_1/system_monitor/power_saver'
+    saver_srv_class = rosservice.get_service_class_by_name(saver_service_name)
+    saver_srv_client = rospy.ServiceProxy(saver_service_name, saver_srv_class)
+    saver_srv_client(saver_data)
+
+    for i in range(0, sleep_second):
+        rospy.loginfo('H1) wait for %d second now : %d s', sleep_second, i)
+        time.sleep(1)
+
+    if just_debug:
+        try:
+            reset_odom_service_name = '/small_hauler_1/reset_odom_to_pose'
+            reset_odom_srv_class = rosservice.get_service_class_by_name(
+                reset_odom_service_name)
+            reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name,
+                                                       reset_odom_srv_class)
+            reset_odom_srv_client(1.99, 3.99, 1.645138, -0.000550, 0.004040, 0.782026)
+        except Exception as e:
+            print("H1 get pose except Error", e)
+            pass
+
+    else:
+        srv_enable_robot_position_callback('/small_hauler_1', True)
+
+    angle = Float64()
+    angle = math.radians(sensor_pitch_value)
+    sensor_pitch.publish(angle)
+
+    # rospy.init_node('turtlebot3_obstacle')
+    try:
+        rospy.loginfo('H1) Check the obstacle ')
+        Obstacle()
+        # while 1:
+        #     x = 1
+
+    except rospy.ROSInterruptException:
+        pass
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,19 @@
+yolo_model:
+
+  config_file:
+    name: p.cfg
+  weight_file:
+    name: p_final.weights
+  threshold:
+    value: 0.5
+  detection_classes:
+    names:
+      - obstacle
+      - Repair Station
+      - Processing Plant
+      - scout
+      - hauler
+      - excavator
+      - spoon
+      - bin
+      - hopper

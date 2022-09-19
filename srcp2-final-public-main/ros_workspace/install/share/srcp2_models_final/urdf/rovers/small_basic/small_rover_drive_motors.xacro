@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2020, 2021 All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+    This XACRO file is intended to slot into the RoverMotorPlugin config
+    for all small rovers, to ensure that uniform drive motor constants
+    are applied to all small rover classes
+
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+ 
+    <!-- drive motor PID and other constants -->
+    <xacro:property name="wheel_kp"  value="100"/>
+    <xacro:property name="wheel_ki"  value="0.0"/>
+    <xacro:property name="wheel_kd"  value="0.0"/>
+    <!-- <xacro:property name="max_wheel_command_speed" value="${pi}"/> -->
+
+    <!-- steering motor PID and other constants -->
+    <xacro:property name="steer_kp"  value="10"/>
+    <xacro:property name="steer_ki"  value="1.0"/>
+    <xacro:property name="steer_kd"  value="0.5"/>
+
+    
+    <xacro:macro name="drive_and_steer_motors" params="rover_type">
+
+        <xacro:if value="${rover_type=='small_scout'}">
+            <xacro:property name="max_wheel_command_speed" value="${2*pi}"/>
+        </xacro:if>
+
+        <xacro:if value="${rover_type=='small_hauler'}">
+            <xacro:property name="max_wheel_command_speed" value="${1.5*pi}"/>
+        </xacro:if>
+
+        <xacro:if value="${rover_type=='small_excavator'}">
+            <xacro:property name="max_wheel_command_speed" value="${pi}"/>
+        </xacro:if>
+
+
+        <!-- DRIVE/WHEEL MOTORS -->
+        <motor>
+            <model_joint_name>fl_wheel_joint</model_joint_name>
+            <controller_type>velocity</controller_type>
+            <ros_topic>front_left_wheel/drive/command/velocity</ros_topic>
+            <max_command_velocity>${max_wheel_command_speed}</max_command_velocity>
+            <kp>${wheel_kp}</kp>
+            <ki>${wheel_ki}</ki>
+            <kd>${wheel_kd}</kd>
+        </motor>
+        <motor>
+            <model_joint_name>fr_wheel_joint</model_joint_name>
+            <controller_type>velocity</controller_type>
+            <ros_topic>front_right_wheel/drive/command/velocity</ros_topic>
+            <max_command_velocity>${max_wheel_command_speed}</max_command_velocity>
+            <kp>${wheel_kp}</kp>
+            <ki>${wheel_ki}</ki>
+            <kd>${wheel_kd}</kd>
+        </motor>
+        <motor>
+            <model_joint_name>bl_wheel_joint</model_joint_name>
+            <controller_type>velocity</controller_type>
+            <ros_topic>back_left_wheel/drive/command/velocity</ros_topic>
+            <max_command_velocity>${max_wheel_command_speed}</max_command_velocity>
+            <kp>${wheel_kp}</kp>
+            <ki>${wheel_ki}</ki>
+            <kd>${wheel_kd}</kd>
+        </motor>
+        <motor>
+            <model_joint_name>br_wheel_joint</model_joint_name>
+            <controller_type>velocity</controller_type>
+            <ros_topic>back_right_wheel/drive/command/velocity</ros_topic>
+            <max_command_velocity>${max_wheel_command_speed}</max_command_velocity>
+            <kp>${wheel_kp}</kp>
+            <ki>${wheel_ki}</ki>
+            <kd>${wheel_kd}</kd>
+        </motor>
+        
+       <!-- STEERING MOTORS -->
+        <motor>
+            <model_joint_name>fl_steering_arm_tibia_joint</model_joint_name>
+            <controller_type>position</controller_type>
+            <ros_topic>front_left_wheel/steer/command/position</ros_topic>
+            <kp>${steer_kp}</kp>
+            <ki>${steer_ki}</ki>
+            <kd>${steer_kd}</kd>
+        </motor>
+        <motor>
+            <model_joint_name>fr_steering_arm_tibia_joint</model_joint_name>
+            <controller_type>position</controller_type>
+            <ros_topic>front_right_wheel/steer/command/position</ros_topic>
+            <kp>${steer_kp}</kp>
+            <ki>${steer_ki}</ki>
+            <kd>${steer_kd}</kd>
+        </motor>
+        <motor>
+            <model_joint_name>bl_steering_arm_tibia_joint</model_joint_name>
+            <controller_type>position</controller_type>
+            <ros_topic>back_left_wheel/steer/command/position</ros_topic>
+            <kp>${steer_kp}</kp>
+            <ki>${steer_ki}</ki>
+            <kd>${steer_kd}</kd>
+        </motor>                
+        <motor>
+            <model_joint_name>br_steering_arm_tibia_joint</model_joint_name>
+            <controller_type>position</controller_type>
+            <ros_topic>back_right_wheel/steer/command/position</ros_topic>
+            <kp>${steer_kp}</kp>
+            <ki>${steer_ki}</ki>
+            <kd>${steer_kd}</kd>
+        </motor>
+
+    </xacro:macro>
+</robot>

@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+
+# Authors: Hongik #
+
+import math
+import os
+import select
+import sys
+
+import rospy
+import rosservice
+import tf
+import time
+import ctypes
+import struct
+import tf2_ros
+
+# import pcl
+
+# from ._pcl import *
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, PoseWithCovarianceStamped, PoseStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan, Imu, Image, PointCloud2, PointField, JointState
+from srcp2_msgs.msg import VolSensorMsg, SystemMonitorMsg, ScoreMsg
+from std_msgs.msg import Float64
+from tf.transformations import euler_from_quaternion
+# from darknet_ros_msgs.msg import BoundingBoxes
+
+import sensor_msgs.point_cloud2 as pc2
+import numpy as np
+import numpy.linalg as lin
+
+if os.name == 'nt':
+    import msvcrt
+else:
+    import tty, termios
+
+err_code = 0
+get_pose = True
+# get_pose = False
+
+
+# x, y, z, pitch ,imu_yaw, odom_yaw, goal_x, goal_y, bat_level
+state_s1 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+state_e1 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+state_h1 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def s1_state_callback(state_msg):
+    global state_s1, state_e1, state_h1
+    try:
+
+        robot_type = state_msg.score
+        state_s1 = state_msg.masses_collected_kg
+    except Exception as e:
+        global err_code
+        err_code = 1
+        print("State except Error", e)
+        pass
+
+
+def e1_state_callback(state_msg):
+    global state_s1, state_e1, state_h1
+    try:
+
+        robot_type = state_msg.score
+        state_e1 = state_msg.masses_collected_kg
+    except Exception as e:
+        global err_code
+        err_code = 1
+        print("State except Error", e)
+        pass
+
+
+def h1_state_callback(state_msg):
+    global state_s1, state_e1, state_h1
+    try:
+
+        robot_type = state_msg.score
+        state_h1 = state_msg.masses_collected_kg
+    except Exception as e:
+        global err_code
+        err_code = 1
+        print("State except Error", e)
+        pass
+
+
+class Command:
+    def __init__(self):
+        self.command()
+
+    def cmd_check(self, target_linear_vel, target_angular_vel, turtlebot_moving, GTG):
+        try:
+            key = self.getKey()
+
+            if key == '0':
+                print("go : ", speed)
+            elif key == 'q':
+                rospy.loginfo('Command) Quit!!')
+                quit()
+                # os.system("")
+                rospy.signal_shutdown("Quit signal")
+
+            return target_linear_vel, target_angular_vel, turtlebot_moving,
+
+        except Exception as e:
+            global err_code
+            if err_code == 0:
+                err_code = 8
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+            rospy.loginfo('Command) Quit signal!!')
+
+            return target_linear_vel, target_angular_vel, turtlebot_moving, GTG
+            pass
+
+    def getKey(self):
+        if os.name == 'nt':
+            return msvcrt.getch()
+        tty.setraw(sys.stdin.fileno())
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if rlist:
+            key = sys.stdin.read(1)
+        else:
+            key = ''
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+        return key
+
+    def command(self):
+        global state_s1, state_h1, state_e1, err_code
+
+        # float64.data = 0.35
+
+        while not rospy.is_shutdown():
+            # rospy.loginfo('S2) rospy.is_shutdown()? %s', rospy.is_shutdown())
+            try:
+                err_code = 3
+
+                rospy.loginfo('----------------------------------------------------')
+                rospy.loginfo('S_1) X:%.2f, Y:%.2f, yaw : %.2f(%.2f), goal:(%.1f, %.1f), bat:%.1f',
+                              state_s1[0], state_s1[1], (state_s1[4]),
+                              (state_s1[5]), state_s1[6], state_s1[7], state_s1[8])
+
+                rospy.loginfo('E_1) X:%.2f, Y:%.2f, yaw : %.2f(%.2f), goal:(%.1f, %.1f), bat:%.1f',
+                              state_e1[0], state_e1[1], (state_e1[4]),
+                              (state_e1[5]), state_e1[6], state_e1[7], state_e1[8])
+
+                rospy.loginfo('H_1) X:%.2f, Y:%.2f, yaw : %.2f(%.2f), goal:(%.1f, %.1f), bat:%.1f',
+                              state_h1[0], state_h1[1], (state_h1[4]),
+                              (state_h1[5]), state_h1[6], state_h1[7], state_h1[8])
+
+            except Exception as e:
+                err_code = 10
+                print("Command except Error", e)
+                pass
+        rospy.loginfo('Co) Ros is shutdown!!!! %s', rospy.is_shutdown())
+
+def shut_down():
+    print("Ros is shutdown!! code : %d " % err_code)
+
+
+def main():
+    if os.name != 'nt':
+        settings = termios.tcgetattr(sys.stdin)
+    rospy.init_node('turtlebot3_teleop')
+    rospy.on_shutdown(shut_down)
+
+    just_debug = False
+    if just_debug:
+        sleep_second = 1
+    else:
+        sleep_second = 5
+
+    for i in range(0, sleep_second):
+        rospy.loginfo('Co) wait for %d second now : %d s', sleep_second, i)
+        time.sleep(1)
+
+    # Set up your subscriber and define its callback
+    rospy.Subscriber('rover_state/scout_1', ScoreMsg, s1_state_callback)
+    rospy.Subscriber('rover_state/excavator_1', ScoreMsg, e1_state_callback)
+    rospy.Subscriber('rover_state/hauler_1', ScoreMsg, h1_state_callback)
+
+    # rospy.Subscriber('small_scout_1/odom', Odometry, s1_state_callback)
+    # rospy.Subscriber('small_scout_1/system_monitor', SystemMonitorMsg, s1_system_monitor)
+
+    # rospy.init_node('turtlebot3_obstacle')
+    try:
+        rospy.loginfo('Co) start Command node ')
+        Command()
+        # while 1:
+        #     x = 1
+
+    except rospy.ROSInterruptException:
+        pass
+
+
+if __name__ == '__main__':
+    main()

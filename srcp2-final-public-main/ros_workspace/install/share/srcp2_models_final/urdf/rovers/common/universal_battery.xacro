@@ -1,0 +1,208 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+
+    <!--
+        @brief Battery box and charging tower collisions for all rovers. 
+               There are no visuals, they are expected to be part of the
+               chassis
+
+        @param name name of the battery link
+        @param parent_name name of the parent link (usually chassis) to connect this to
+        @param offset_xyz offset from the parent xyz (meters)
+        @param mass mass of the battery link (kg)
+
+        expected globals:
+        @param battery_collision_x battery's collision box x (meters)
+        @param battery_collision_y battery's collision box y (meters)
+        @param battery_collision_z battery's collision box z (meters)
+
+    -->
+    <xacro:macro name="universal_battery" params="name parent_name offset_xyz mass rover_type">
+
+        <!-- charge tower properties (meters) -->
+        <xacro:property name="charge_tower_radius" value="0.05" /> 
+        <xacro:property name="charge_tower_height" value="0.02" /> 
+        <xacro:property name="charge_tower_mass"   value="1.0"  />
+
+        <xacro:property name="charge_tower_offset_x" value="${-0.1*battery_collision_x}"/>
+        <xacro:property name="charge_tower_offset_y" value="0"/>
+        <xacro:property name="charge_tower_offset_z" value="${-1.5*charge_tower_height}"/>
+
+        <!-- origin relative to parent (meters)-->
+        <xacro:macro name="battery_joint_origin">
+            <origin
+                xyz="${offset_xyz}"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="battery_origin">
+            <origin
+                xyz="0 0 0"
+                rpy="0 0 0"/>
+        </xacro:macro>
+
+        <xacro:macro name="charge_tower_joint_origin">
+            <origin
+                xyz="${charge_tower_offset_x} ${charge_tower_offset_y} ${charge_tower_offset_z}"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="charge_tower_origin">
+            <origin
+                xyz="0 0 0"
+                rpy="0 0 0"/>
+        </xacro:macro>
+
+        <!-- 
+            ============================================================================================================
+        -->
+
+        <!-- Battery box link -->
+        <link name="${name}">
+            <collision name="${name}_collision">
+                <xacro:battery_origin/>
+                <geometry>
+                    <box size="${battery_collision_x} ${battery_collision_y} ${battery_collision_z}"/>
+                </geometry>
+            </collision>
+
+            <inertial>
+                <mass value = "${mass}"/>
+                <xacro:battery_origin/>
+                <xacro:box_inertia 
+                    m = "${mass}"
+                    x = "${battery_collision_x}" 
+                    y = "${battery_collision_y}" 
+                    z = "${battery_collision_z}"/>
+            </inertial>
+        </link>
+
+        <!-- Charging tower cap link -->
+        <link name="charging_tower_cap">
+            <collision name="charging_tower_collision">
+                <xacro:battery_origin/>
+                <geometry>
+                    <cylinder length="${charge_tower_height}" radius="${charge_tower_radius}"/>
+                </geometry>
+            </collision>
+
+            <inertial>
+                <mass value="${charge_tower_mass}"/>
+                <xacro:cylinder_inertia 
+                    m="${charge_tower_mass}"
+                    r="${charge_tower_radius}"
+                    h="${charge_tower_height}"/>
+            </inertial>
+        </link>
+
+        <!-- rigid link to connect the battery box to the chassis -->
+        <joint name="battery_box_joint" type="fixed">
+            <xacro:battery_joint_origin/>
+            <parent link="${parent_name}"/>
+            <child  link="${name}"/>
+        </joint>
+
+        <!-- rigid link joint connecting the charging tower to battery box -->
+        <joint name="charging_tower_joint" type="fixed">
+            <xacro:charge_tower_joint_origin/>
+            <parent link="${name}"/>
+            <child  link="charging_tower_cap"/>
+        </joint>
+
+        <!-- 
+            ============================================================================================================
+        -->
+
+        <!-- todo:electrical harness: recharge monitor plugin goes here -->
+        <gazebo>
+            <!-- <plugin name="recharge_monitor" filename="libRechargeMonitor.so"/> -->
+            <!-- add parameters here -->
+        </gazebo>
+
+        <gazebo>
+
+            <plugin name="solar_panel_plugin" filename="libSolarPanelPlugin.so">
+                <efficiencyMin>0.75</efficiencyMin>
+                <efficiencyMax>0.90</efficiencyMax>
+                <!-- 
+                    <consumer> : The values of the tags below must match the <consumer> tags 
+                    implemented in the battery plugin sdf configuration
+                -->
+                <consumer uniqueName="solar_panel" />
+                <maxChargingRate>10000</maxChargingRate>
+            </plugin>
+
+            <plugin name="battery_plugin" filename="libBatteryPlugin.so">
+                <!-- model update rate (Hz) -->
+                <update_rate>10.0</update_rate>
+                <!-- WHrs -->
+                <maxCapacity>1000</maxCapacity>
+                <!-- expect init = 100, safe = 25, shutdown = 10 -->
+                <!-- the test starts the battery below safe level and near a charger -->
+                <initialChargePercent>100</initialChargePercent>
+                <safeModePercent>25</safeModePercent>
+                <shutdownPercent>10</shutdownPercent>
+                <!-- safeModeAvailable = how much of requested would be available 
+                    if it still fits in safe/low power charge level -->
+                <safeModeAvailable>0.5</safeModeAvailable>
+                <!-- W/s -->
+                <maxDischargeRate>10000</maxDischargeRate>
+                <!-- timeouts in seconds -->
+                <systemStartTimeout>4.0</systemStartTimeout>
+                <gzTopicTimeout>60</gzTopicTimeout>
+                <forceToWatts>10.0</forceToWatts>
+                
+                <!-- assuming all components may have a base usage (or at least leakage power) -->
+                <!-- charging -->
+                <!-- NOTE if we want to do angles, we'll likely want to drop constant_watts for solar_panel and do the math instead -->
+                <consumer uniqueName="solar_panel_left"  is_solar="true" constant_watts="-300" />
+                <consumer uniqueName="solar_panel_right" is_solar="true" constant_watts="-300" />
+                <!-- note separate charge_watts field for charging station applies when in proximity in meters-->            
+                <!-- <consumer uniqueName="charging_bot" charge_watts="-5000" charge_radius="1.0"/> -->
+                <consumer uniqueName="charging_box" charge_watts="-100" charge_radius="2.0"/>
+
+                <!-- CPU and other base power consumers -->
+                <!-- <consumer active="false" uniqueName="cpu" constant_watts="500" /> -->
+
+                <!-- sensors -->
+                <consumer uniqueName="imu" is_sensor="true" constant_watts="50" />
+                <consumer uniqueName="stereoCamera" is_sensor="true" constant_watts="250"  />
+                <consumer uniqueName="lidar" is_sensor="true" constant_watts="100"  />
+                
+                <!-- motors -->
+                <consumer uniqueName="front_left_wheel/drive"  jointName="fl_wheel_joint" />
+                <consumer uniqueName="front_right_wheel/drive" jointName="fr_wheel_joint" />
+                <consumer uniqueName="back_left_wheel/drive"   jointName="bl_wheel_joint" />
+                <consumer uniqueName="back_right_wheel/drive"  jointName="br_wheel_joint" />
+
+                <consumer uniqueName="front_left_wheel/steer"  jointName="fl_steering_arm_tibia_joint" />
+                <consumer uniqueName="front_right_wheel/steer" jointName="fr_steering_arm_tibia_joint" />
+                <consumer uniqueName="back_left_wheel/steer"   jointName="bl_steering_arm_tibia_joint" />
+                <consumer uniqueName="back_right_wheel/steer"  jointName="br_steering_arm_tibia_joint" />
+
+                <xacro:if value="${rover_type=='small_scout'}">
+                    <consumer uniqueName="volatileSensor" is_sensor="true" constant_watts="100"  />
+                </xacro:if>
+
+                <xacro:if value="${rover_type=='small_hauler'}">
+                    <consumer uniqueName="bin/command/position"  jointName="bin_joint"  />
+                </xacro:if>
+
+                <xacro:if value="${rover_type=='small_excavator'}">
+                    <consumer uniqueName="arm/elbow_pitch/command/position"  jointName="elbow_pitch_joint"  />
+                    <consumer uniqueName="arm/shoulder_pitch/command/position"  jointName="shoulder_pitch_joint"  />
+                    <consumer uniqueName="arm/shoulder_yaw/command/position"  jointName="shoulder_yaw_joint"  />
+                    <consumer uniqueName="arm/wrist_pitch/command/position"  jointName="wrist_pitch_joint"  />
+                </xacro:if>
+
+            </plugin>
+
+        </gazebo>
+
+    </xacro:macro>
+</robot>

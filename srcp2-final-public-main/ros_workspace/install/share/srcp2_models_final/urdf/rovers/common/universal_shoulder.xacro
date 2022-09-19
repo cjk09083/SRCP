@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- 
+        TODO: Transmission
+        Is transmission necessary for unpowered joints?
+        Is it necessary at all for new style motors? 
+    -->
+
+    <!--
+        @brief Universal shoulder joint and femur for all rovers
+
+        This is the steering arm, there are four of these on each robot. They 
+        connect the chassis to the 'tibia' link and 'ankle' joints, providing
+        suspension.
+
+        Input Params:
+        @param name name of this arm
+        @param parent the parent link (probably 'chassis')
+        @param lr_sign left-arms == -1, right-arms == +1
+        @param fb_sign back-arms == -1, front-arms == +1
+        @param shoulder_xyz 
+
+        Expected Globals (these are the same for all arms on a robot, or can be mirrored)
+        @param shoulder_joint_x,_y,_z position of the shoulder joint with respect to the parent
+        @param shoulder_length length of 'femur' bone in meters
+        @param shoulder_mass total mass of linkage in kg
+        @param shoulder_damping   shoulder joint damping value Nm/rad/s
+        @param shoulder_friction  shoulder joint friction value Nm/rad ??
+        @param shoulder_stiffness shoulder joint stiffness Nm/rad
+        @param shoulder_effort_limit shoulder joint effort limit Nm
+        @param shoulder_joint_pitch default position of the shoulder joint in radians (should be a small angle to tension suspension)
+         
+    -->
+    <xacro:macro name="universal_shoulder" params="name parent lr_sign fb_sign visual_xyz visual_rpy shoulder">
+
+        <!-- arm collision box dimensions (meters) -->
+        <xacro:property name="femur_box_x" value="${shoulder_length}"/>
+        <xacro:property name="femur_box_y" value="0.1"/>
+        <xacro:property name="femur_box_z" value="0.1"/>
+
+        <!-- as this is where the arm joins the body, strut and shoulder origins are relative to this-->
+        <xacro:macro name="shoulder_joint_origin">
+            <origin
+                xyz="${fb_sign*shoulder_joint_x} ${lr_sign*shoulder_joint_y} ${shoulder_joint_z}"
+                rpy="0 ${fb_sign * shoulder_joint_pitch} 0"/>
+        </xacro:macro>
+        <xacro:macro name="shoulder_strut_origin">
+            <origin
+                xyz="${fb_sign * (femur_box_x/2.0)} 0 0"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="strut_visual_origin">
+            <origin
+                xyz="${visual_xyz}"
+                rpy="${visual_rpy}"/>
+        </xacro:macro>
+
+        <!-- 
+            ============================================================================================================
+         -->
+
+        <!-- Main Steering Arm Geometry -->
+        <link name="${name}">
+
+            <collision name="${name}_strut_collision">
+                <xacro:shoulder_strut_origin/>
+                <geometry>
+                    <box size = "${femur_box_x*0.2} ${femur_box_y} ${femur_box_z}"/>
+                </geometry>
+            </collision>
+            <visual name="${name}_strut_visual">
+                <xacro:strut_visual_origin/>
+                <geometry>
+                    <mesh
+                        filename = "package://srcp2_models_final/${shoulder_mesh}"
+                        scale = "${shoulder_joint_visual_scale}"/>        
+                </geometry>
+            </visual>
+
+            <collision name="${name}_collision">
+                <origin
+                    xyz="0 0 0"
+                    rpy="${pi/2.0} 0 0"/>
+                <geometry>
+                    <cylinder length="${1.5*femur_box_y}" radius="${femur_box_z}"/>
+                </geometry>
+            </collision>
+
+            <!-- only the strut has inertial presense -->
+            <inertial>
+                <mass value = "${shoulder_mass}"/>
+                <xacro:shoulder_strut_origin/>
+                <xacro:box_inertia 
+                    m = "${shoulder_mass}"
+                    x = "${femur_box_x}"
+                    y = "${femur_box_y}"
+                    z = "${femur_box_z}"/>
+            </inertial>
+        </link>
+
+        <!-- connection of steering arm to rover chassis --> 
+        <joint name="${shoulder}_joint" type="revolute">
+            <xacro:shoulder_joint_origin/>
+            <parent link = "${parent}"/>
+            <child  link = "${name}"/>
+            <axis xyz="0 1 0" rpy="0 0 0" />
+            <fdir1>0 1 0</fdir1>
+            <dynamics
+                damping  = "${shoulder_damping}"
+                friction = "${shoulder_friction}"/>
+            <limit
+                upper    = "${shoulder_upper_limit}" 
+                lower    = "${shoulder_lower_limit}" 
+                effort   = "${shoulder_effort_limit}" 
+                velocity = "${shoulder_velocity_limit}"/>
+        </joint>
+
+        <!-- non URDF Gazebo Specific Physics for chassis connection joint -->
+        <gazebo reference="${shoulder}_joint">
+            <implicitSpringDamper>true</implicitSpringDamper>
+            <springStiffness>${shoulder_stiffness}</springStiffness>
+            <springReference>0</springReference>
+        </gazebo>
+
+
+        <!-- todo: as this is an unpowered joint, is this necessary? -->
+        <!-- <transmission name="${name}_arm_trans">
+            <type>transmission_interface/SimpleTransmission</type>
+            <joint name="${name}_arm_joint">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            </joint>
+            <actuator name="${name}_arm_motor">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+                <mechanicalReduction>1</mechanicalReduction>
+            </actuator>
+        </transmission> -->
+
+    </xacro:macro>
+</robot>

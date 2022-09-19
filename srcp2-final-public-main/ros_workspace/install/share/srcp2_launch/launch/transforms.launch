@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Space Robotics Challenge (2)
+    NASA-JSC
+    Copyright (c) 2019, 2020, 2021
+    All Rights Reserved
+    Unauthorized distribution strictly prohibited
+    Spawn an instance of a rover type. This should be rosrun'd in a
+    loop to generate the required robot count.
+-->
+<launch>
+
+    <arg name="rover_name"  default="unnamed_rover"/>
+    <arg name="rover_class" default="default_class" />
+    <arg name="robot_description" default="$(arg rover_name)/robot_description" />
+    <arg name="use_tf_static" default="true"/>
+
+    <group ns="$(arg rover_name)">
+
+        <!-- spawns the robot_state_publisher for the rover (tfs)-->
+        <node 
+            name    = "$(arg rover_name)_robot_state_publisher"
+            pkg     = "robot_state_publisher"
+            type    = "robot_state_publisher"
+            respawn = "true"
+            output  = "screen">
+
+            <param name="use_tf_static" value="$(arg use_tf_static)"/>
+        </node>
+
+    </group>
+
+</launch>

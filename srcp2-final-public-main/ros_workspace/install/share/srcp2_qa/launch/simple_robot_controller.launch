@@ -1,0 +1,38 @@
+<launch>
+  <arg name="robot_name"/>
+  <arg name="controller_spawner_name"/>
+  <arg name="node_name"/>
+  <arg name="robot_state_publisher_name"/>
+
+  <rosparam file="$(find srcp2_qa)/config/simple_robot_control.yaml" command="load"/>
+
+  <!-- spawns the controller_manager for the rover -->
+  <node 
+    name    = "$(arg robot_name)_controller_spawner"
+    pkg     = "controller_manager"
+    type    = "spawner"
+    respawn = "false"
+    output  = "screen"
+    args    = "joint_state_controller 
+               fr_wheel_controller 
+               fl_wheel_controller
+               br_wheel_controller
+               bl_wheel_controller
+              ">
+  </node>
+
+  <!-- spawns the robot_state_publisher for the rover -->
+  <arg name="use_tf_static" default="true"/>
+
+  <node
+    name    = "$(arg robot_name)_robot_state_publisher"
+    pkg     = "robot_state_publisher"
+    type    = "robot_state_publisher"
+    respawn = "true"
+    output  = "screen">
+
+    <param name="use_tf_static" value="$(arg use_tf_static)"/>
+    <remap from="/joint_states" to="joint_states" />
+  </node>
+
+</launch>

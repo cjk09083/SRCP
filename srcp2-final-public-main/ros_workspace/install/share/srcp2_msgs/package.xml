@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>srcp2_msgs</name>
+  <version>0.0.0</version>
+  <description>
+    All Messages used by the SRCP2 simulations
+    This is broken out into a new ROS package to enable compile-time
+    dependencies to be enforced  
+  </description>
+  <maintainer email="jane.doe@example.com">Jane Doe</maintainer>
+  <license>
+  Copyright (c), 2019 NASA-JSC, All Rights Reserved.
+  Unauthorized copying or distribution of this code is strictly prohibited
+  </license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>message_runtime</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  
+  <build_export_depend>message_runtime</build_export_depend>
+  <build_export_depend>message_generation</build_export_depend>
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>sensor_msgs</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>nav_msgs</build_export_depend>
+
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+
+</package>

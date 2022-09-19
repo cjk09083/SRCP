@@ -1,0 +1,29 @@
+material lunar_texture
+{
+    receive_shadows on
+	technique
+	{
+		pass
+		{
+			// lighting control properties
+			lighting on
+
+			// color and light reflection properties
+			ambient  0.10 0.10 0.10 1.00
+			diffuse  1.00 1.00 1.00 1.00
+			//
+			// the texture image
+			texture_unit
+			{
+				texture ../textures/lunar_gravel.png 2d unlimited
+				scale 0.05 0.05
+			}
+			texture_unit normals
+			{
+				texture ../textures/lunar_gravel_normal.png 2d unlimited
+				scale 0.05 0.05
+			}
+
+		}
+	}
+}

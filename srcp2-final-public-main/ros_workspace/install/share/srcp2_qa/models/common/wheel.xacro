@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	This XACRO file defines the front_right_wheel macro for the small robot
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="wheel" params="flbr fb lr">
+
+        <link name="${flbr}_wheel">
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${wheel_width}" radius="${wheel_radius}"/>
+                </geometry>
+            </collision>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${wheel_width}" radius="${wheel_radius}"/>
+                </geometry>
+            </visual>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <cylinder length="${wheel_width}" radius="${wheel_radius}"/>
+                </geometry>
+            </visual>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${wheel_mass}"/>
+                <cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
+            </inertial>
+        </link>
+
+        <joint name="${flbr}_wheel_joint" type="continuous">
+            <parent link="chassis"/>
+            <child link="${flbr}_wheel"/>
+            <origin xyz="${chassis_length*fb/2.25} ${ lr * (chassis_width/2 + wheel_width/2)} 0" rpy="0 ${pi/2} ${pi/2 * lr}" />
+            <axis xyz="0 0 ${lr}" rpy="0 0 0" />
+            <limit effort="10000" velocity="10"/>
+            <dynamics friction="5"/>
+        </joint>
+
+        <transmission name="${flbr}_wheel_trans">
+            <type>transmission_interface/SimpleTransmission</type>
+            <joint name="${flbr}_wheel_joint">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            </joint>
+            <actuator name="${flbr}_wheel_motor">
+                <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+                <mechanicalReduction>1</mechanicalReduction>
+            </actuator>
+        </transmission>
+
+        <gazebo reference="${flbr}_wheel">
+            <material>Gazebo/Gray</material>
+        </gazebo>
+
+        <link name="${flbr}_wheel_visualizer">
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <box size="0.05 0.05 0.25"/>
+                </geometry>
+            </visual>
+        </link>
+        <joint name="${flbr}_wheel_visualizer_joint" type="fixed">
+            <parent link="${flbr}_wheel"/>
+            <child link="${flbr}_wheel_visualizer"/>
+            <origin xyz="0 0 ${wheel_width/2}" rpy="0 ${pi/2} ${pi/2}" />
+        </joint>
+
+    </xacro:macro>
+</robot>

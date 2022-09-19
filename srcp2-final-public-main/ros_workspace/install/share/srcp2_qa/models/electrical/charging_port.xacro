@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+    Unauthorized distribution strictly prohibited
+    
+    generic xacro for either a charging link or charging port
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="charging_port" params="link_name">
+        
+        <xacro:property name="charging_port_length" value="0.15"/>
+        <xacro:property name="charging_port_width" value="0.15"/>
+        <xacro:property name="charging_port_height" value="0.15"/>
+        <xacro:property name="charging_port_mass" value="0.15"/>
+
+        <link name="${link_name}">
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <box size="${charging_port_length} ${charging_port_width} ${charging_port_height}"/>
+                </geometry>
+            </collision>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <geometry>
+                    <box size="${charging_port_length} ${charging_port_width} ${charging_port_height}"/>
+                </geometry>
+            </visual>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0" />
+                <mass value="${charging_port_mass}"/>
+                <box_inertia m="${charging_port_mass}" x="${charging_port_length}" y="${charging_port_width}" z="${charging_port_height}"/>
+           </inertial>
+        </link>
+
+        <joint name="${link_name}_joint" type="fixed">
+            <parent link="chassis"/>
+            <child link="${link_name}"/>
+            <origin xyz=" 0 ${chassis_width/2} ${chassis_height + charging_port_height/2}" rpy="0 0 0" />
+        </joint>
+
+        <gazebo reference="${link_name}_joint">
+            <disableFixedJointLumping>true</disableFixedJointLumping> 
+            <preserveFixedJoint>true</preserveFixedJoint>
+        </gazebo>
+
+        <gazebo reference="${link_name}">
+            <material>Gazebo/Red</material>
+        </gazebo>
+
+    </xacro:macro>
+</robot>

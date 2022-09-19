@@ -1,0 +1,8 @@
+prefix=/home/srcp2/cmp_workspace/devel
+
+Name: yolo_test
+Description: Description of yolo_test
+Version: 1.1.5
+Cflags: -I/home/srcp2/cmp_workspace/src/yolo_test/yolo_test/include -I/usr/include
+Libs: -L${prefix}/lib -lyolo_test_lib /usr/lib/x86_64-linux-gnu/libboost_thread.so.1.71.0
+Requires: cv_bridge roscpp actionlib rospy std_msgs darknet_ros_msgs image_transport nodelet

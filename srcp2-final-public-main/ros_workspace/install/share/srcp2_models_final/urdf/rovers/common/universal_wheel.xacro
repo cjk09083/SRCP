@@ -1,0 +1,122 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!--
+        @brief wheel link and main drive motors
+
+        Input args:
+        @param name: name of the wheel
+        @param parent_name: name of the parent link (probably the tibia)
+        @param lr_sign: -1 for left, +1 for right
+        @param radius: wheel radius
+        @param tibia_collision_length: length of the tibia in meters
+        @param visual_rpy: visual roll, pitch, yaw angles (rads)
+
+        Expected globals:
+        @param wheel_base: distance between left-right wheels (meters)
+        @param wheel_length: distance between front-back wheels (meters)
+        @param wheel_radius: wheel radius (meters); nb: the wheel collision is modeled as a sphere
+        @param wheel_mass: wheel mass (kg)
+        @param wheel_mesh: path to the wheel visual mesh from the root of this ROS package/models/rovers
+
+        Expected wheel friction globals
+        @param wheel_mu1: wheel friction coef in rolling direction
+        @param wheel_mu2: wheel friction coef in the sliding direction
+        @param wheel_kp:  todo: what is this?
+        @param wheel_kd:  todo: what is this?
+        @param wheel_torsional_coef:  torsional patch friction coeff (twist friction)
+        @param wheel_torsional_radius: torsional patch friction radius (meters)
+
+    -->
+    <xacro:macro name="small_wheel" params="name parent_name lr_sign visual_scale visual_rpy tibia_collision_length wheel">
+
+        <xacro:macro name="small_wheel_joint_origin">
+            <origin
+                xyz="0 0 ${tibia_collision_length}"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="collision_origin">
+            <origin
+                xyz="0 0 0"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="visual_origin">
+            <origin
+                xyz="0 0 0"
+                rpy="${visual_rpy}"/>
+        </xacro:macro>
+
+        <link name="${name}">
+            <collision name="${name}_colision">
+                <xacro:collision_origin/>
+                <geometry>
+                    <sphere radius="${wheel_radius}"/>
+                </geometry>
+                <surface>
+                    <contact>
+                        <ode>
+                            <kp>${wheel_kp}</kp>
+                            <kd>${wheel_kd}</kd>
+                            <mu1>${wheel_mu1}</mu1>
+                            <mu2>${wheel_mu2}</mu2>
+                            <soft_cfm>${wheel_soft_cfm}</soft_cfm>
+                            <slip2>${wheel_slip2}</slip2>
+                            <maxVel>${wheel_maxVel}</maxVel>
+                            <minDepth>${wheel_minDepth}</minDepth>
+                        </ode>
+                    </contact>
+                    <!-- <friction>
+                        <torsional>
+                            <coefficient>${wheel_torsional_coef}</coefficient>
+                            <surface_radius>${wheel_torsional_radius}</surface_radius>
+                        </torsional>
+                    </friction> -->
+                </surface>
+            </collision>
+
+            <visual name="${name}_visual">
+                <xacro:visual_origin/>
+                <geometry>
+                    <mesh           
+                        filename = "package://srcp2_models_final/${wheel_mesh}" 
+                        scale = "${visual_scale}"/>
+                </geometry>
+            </visual>
+
+            <inertial>
+                <xacro:collision_origin/>
+                <mass value="${wheel_mass}"/>
+                <xacro:cylinder_inertia
+                    m="${wheel_mass}"
+                    r="${wheel_radius}"
+                    h="${wheel_base}"/>
+            </inertial>
+        </link>
+
+        <joint name="${wheel}_joint" type="continuous">
+            <xacro:small_wheel_joint_origin/>
+            <parent link = "${parent_name}"/>
+            <child  link = "${name}"/>
+            <axis
+                xyz = "0 1 0"
+                rpy = "0 0 0" />
+            <limit
+                effort   = "${wheel_effort_limit}"
+                velocity = "${wheel_velocity_limit}"/>
+            <dynamics
+                damping  = "${wheel_damping}"
+                friction = "${wheel_friction}"/>
+        </joint>
+
+        <gazebo reference="${wheel}_joint">
+            <provideFeedback>true</provideFeedback>
+        </gazebo>
+
+    </xacro:macro>
+</robot>

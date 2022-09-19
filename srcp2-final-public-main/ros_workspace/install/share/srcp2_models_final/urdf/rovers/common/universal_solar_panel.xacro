@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!--
+        @brief rover solar panel, both left and right, large and small.
+               This is largely a small collision box and a place to hang
+               plugins for solar charging. This is not a moving part
+               and has a fixed joint.
+
+               There is no visual, this should be accounted for in the
+               chassis
+
+        Xacro:Macro input args:
+        @param name: the name of the panel link
+        @param parent_name: link to parent this to (probably the chassis, or battery)
+        @param offset_xyz: the offset from the parent (m)
+
+        Expected Global Values:
+        @param panel_collision_x,_y,_z: solar panel collision/inertia demensions (m)
+        @param panel_mass: mass of solar panel in kg
+    -->
+    <xacro:macro name="universal_solar_panel" params="name parent_name offset_xyz">
+
+        <!-- these are for inertial calc's only, actual collision geometry is by mesh -->
+        <xacro:property name="panel_collision_x" value="0.5" />    <!-- meters -->
+        <xacro:property name="panel_collision_y" value="0.5" />    <!-- meters -->
+        <xacro:property name="panel_collision_z" value="0.01" />   <!-- meters -->
+
+        <xacro:macro name="solar_panel_joint_origin">
+            <origin
+                xyz="${offset_xyz}"
+                rpy="0 0 0"/>
+        </xacro:macro>
+        <xacro:macro name="solar_panel_origin">
+            <origin
+                xyz="0 0 0"
+                rpy="0 0 0"/>
+        </xacro:macro>
+
+        <!--
+            ============================================================================================================
+        -->
+        <link name="${name}">
+
+            <!-- there is no visual of this element, it is part of the chassis visual mesh -->
+            <collision name="${name}_collision">
+                <xacro:solar_panel_origin/>
+                <geometry>
+                    <box size="${panel_collision_x} ${panel_collision_y} ${panel_collision_z}"/>
+                </geometry>
+            </collision>
+
+            <inertial>
+                <xacro:solar_panel_origin/>
+                <mass value = "${panel_mass}"/>
+                <xacro:box_inertia 
+                    m = "${panel_mass}"
+                    x = "${panel_collision_x}"
+                    y = "${panel_collision_y}"
+                    z = "${panel_collision_z}"/>
+            </inertial>
+        </link>
+
+        <joint name="${name}_joint" type="fixed">
+            <xacro:solar_panel_joint_origin/>
+            <parent link = "${parent_name}"/>
+            <child  link = "${name}" />
+        </joint>
+
+        <!-- todo:electrical: solar panel charging plugin goes here --> 
+        <gazebo>
+            <!-- <plugin name="solar_panel_charging" filename="libSolarPanelCharging.so"/> -->
+            <!-- plugin parameters here -->
+        </gazebo>
+
+    </xacro:macro>
+</robot>

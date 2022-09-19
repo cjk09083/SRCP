@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+    This XACRO file defines the HAULER's motors, initial PIDs and publication ros_topics
+    Joint effort maximums, friction, damping etc should be set in that joint's
+    xacro file
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:include filename="../small_basic/small_rover_drive_motors.xacro"/>
+    <xacro:include filename="../small_basic/small_rover_sensor_motors.xacro"/>
+    
+    <xacro:property name="bin_tilt_kp"  value="80"/>
+    <xacro:property name="bin_tilt_ki"  value="1.0"/>
+    <xacro:property name="bin_tilt_kd"  value="10.0"/>
+ 
+    <gazebo>
+        <plugin name="rover_motors" filename="libRoverMotorsPlugin.so">
+
+            <update_rate>30.0</update_rate>
+            <all_motors>
+
+                <!-- import the standard drive motors -->
+                <xacro:drive_and_steer_motors rover_type = "small_hauler"/>
+
+                <!-- import the standard sensor motors -->
+                <xacro:sensor_motors/>
+
+                <!-- the bin motor connection -->
+                <motor>
+                    <model_joint_name>bin_joint</model_joint_name>
+                    <controller_type>position</controller_type>
+                    <ros_topic>bin/command/position</ros_topic>
+                    <kp>${bin_tilt_kp}</kp>
+                    <ki>${bin_tilt_ki}</ki>
+                    <kd>${bin_tilt_kd}</kd>
+                </motor>
+            </all_motors>
+        </plugin>
+
+    </gazebo>
+</robot>

@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+
+
+<!--
+    @brief small scout for srcp2 final rounds
+-->
+<robot name="small_scout" xmlns:xacro="http://ros.org/wiki/xacro">
+
+   <xacro:arg name="rover_name" default="small_scout" />
+   
+    <!-- includes: hardware -->
+    <xacro:include filename="../common/inertia_macros.xacro"/>
+    <xacro:include filename="../small_basic/small_rover_chassis.xacro"/>
+    <xacro:include filename="../small_basic/small_rover_drive.xacro"/>
+    <xacro:include filename="../small_basic/small_rover_power.xacro"/>
+
+    <!-- scout hardware -->
+    <xacro:small_rover_chassis  rover_name="$(arg rover_name)"/>
+    <xacro:small_rover_drive    rover_name="$(arg rover_name)"/>
+
+    <!-- includes: sensor electronics -->
+    <xacro:include filename="../small_basic/small_rover_sensors.xacro"/> 
+    <xacro:small_rover_camera_sensor    rover_name="$(arg rover_name)"/>
+    <xacro:small_rover_imu_sensor       rover_name="$(arg rover_name)"/>
+    <xacro:small_rover_lidar_sensor     rover_name="$(arg rover_name)"/>
+    
+    <xacro:include filename="../small_basic/small_rover_sensors.gazebo"/>  
+
+    <!-- includes: volatile sensor -->
+    <xacro:include filename="./volatile_sensor.xacro"/>
+    <xacro:volatile_sensor rover_name="$(arg rover_name)"/>
+    
+    <!-- includes: motors (drive and sensor) -->
+    <xacro:include filename="./motors.gazebo"/>
+
+    <gazebo>
+        <plugin name="joint_state_publisher" filename="libJointStatePublisher.so">
+            <robotNamespace>$(arg rover_name)</robotNamespace>
+            <jointName>
+                    bl_wheel_joint,
+                    br_wheel_joint,
+                    fl_wheel_joint,
+                    fr_wheel_joint,
+                    bl_steering_arm_tibia_joint,
+                    br_steering_arm_tibia_joint,
+                    fl_steering_arm_tibia_joint,
+                    fr_steering_arm_tibia_joint,
+                    bl_steering_arm_shoulder_joint,
+                    br_steering_arm_shoulder_joint,
+                    fl_steering_arm_shoulder_joint,
+                    fr_steering_arm_shoulder_joint,
+                    sensor_bar_pitch_joint,
+                    sensor_bar_yaw_joint,
+                    volatile_sensor_joint
+            </jointName>
+            <updateRate>100</updateRate>
+            <alwaysOn>true</alwaysOn>
+        </plugin>
+    </gazebo>
+
+</robot>
+
+      

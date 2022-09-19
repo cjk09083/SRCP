@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	This XACRO is the Gazebo definitions for the Small Rover
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <gazebo>
+        <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so"/>
+    </gazebo>
+
+<!-- 
+    <gazebo>
+        <plugin name="solar_panel_plugin" filename="libSolarPanelPlugin.so"/>
+    </gazebo>
+
+    <gazebo>
+        <plugin name="battery_plugin" filename="libBatteryPlugin.so"/>
+    </gazebo>
+-->
+
+<!--
+    <gazebo reference="fl_wheel_joint">
+        <plugin name="fl_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+    <gazebo reference="fr_wheel_joint">
+        <plugin name="fr_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+    <gazebo reference="bl_wheel_joint">
+        <plugin name="bl_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+    <gazebo reference="br_wheel_joint">
+        <plugin name="br_motor_plugin" filename="libMotorPlugin.so"/>
+    </gazebo>
+-->
+
+
+</robot>

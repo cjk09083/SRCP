@@ -1,0 +1,222 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!--
+       All four small rover steering arms, tibia and wheels
+       Her you will find:
+       - wheel friction coefficients
+       - joint limits and consants for the shoulder and ankle joints
+       - physical parameters for the steering arms
+    -->
+    <xacro:macro name="small_rover_drive" params="rover_name">
+
+        <xacro:property name="steering_arm_length" value="0.4"/>
+
+        <xacro:property name="shoulder_mass"    value="2.00"/>  <!-- kg -->
+        <xacro:property name="shoulder_length"  value="0.40"/>  <!-- m -->
+        <xacro:property name="shoulder_joint_x" value="0.13"/>  <!-- m -->
+        <xacro:property name="shoulder_joint_y" value="0.50"/>  <!-- m -->
+        <xacro:property name="shoulder_joint_z" value="0.12"/>  <!-- m -->
+        <xacro:property name="shoulder_joint_pitch" value="0.0"/>
+
+        <xacro:property name="shoulder_joint_visual_scale" value="0.5 0.5 0.5"/> 
+        <xacro:property name="shoulder_joint_visual_xyz"   value="0 0 0"/> 
+
+        <xacro:property name="shoulder_upper_limit"    value="${pi/12.0}"/>  <!-- rads -->
+        <xacro:property name="shoulder_lower_limit"    value="-${pi/12.0}"/> <!-- rads -->
+        <xacro:property name="shoulder_velocity_limit" value="${pi/12.0}"/>  <!-- rads/sec -->
+        <xacro:property name="shoulder_effort_limit"   value="1e4"/>         <!-- Nm -->
+
+        <xacro:property name="shoulder_damping"   value="5" /> <!-- Nm/rad/s -->
+        <xacro:property name="shoulder_friction"  value="5" /> <!-- Nm ??? -->
+        <xacro:property name="shoulder_stiffness" value="400"/>  <!-- Nm/rads -->
+
+        <xacro:property name="tibia_mass"                 value="10.0"/>      <!-- kg -->
+        <xacro:property name="tibia_collision_length"     value="0.4"/>       <!-- m -->
+        <xacro:property name="tibia_collision_radius"     value="0.05"/>      <!-- m -->
+        <xacro:property name="ankle_joint_effort_limit"   value="200"/>       <!-- Nm -->
+        <xacro:property name="ankle_joint_velocity_limit" value="${pi/4.0}"/> <!-- rad/sec -->
+
+        <!-- all shoulder joints and femurs -->
+        <xacro:include filename="../common/universal_shoulder.xacro"/>
+        <xacro:property name="shoulder_mesh" value="meshes/rovers/small_basic/small_steering_arm.dae"/>
+
+        <xacro:universal_shoulder 
+            name     = "${rover_name}_fr_steering_arm_shoulder" 
+            parent   = "${rover_name}_small_chassis" 
+            lr_sign  = "-1" 
+            fb_sign  = "1"
+            visual_xyz="0 0 0"
+            visual_rpy="0 0 ${pi/2}"
+            shoulder="fr_steering_arm_shoulder"
+        />
+
+        <xacro:universal_shoulder 
+            name     = "${rover_name}_fl_steering_arm_shoulder" 
+            parent   = "${rover_name}_small_chassis" 
+            lr_sign  = "1" 
+            fb_sign  = "1"
+            visual_xyz="0 0 0"
+            visual_rpy="0 0 ${pi/2}"
+            shoulder="fl_steering_arm_shoulder"
+        />
+
+        <!-- reset for the back arms, as they have to carry more weight -->
+        <xacro:property name="shoulder_damping"   value="10" /> <!-- Nm/rad/s -->
+        <xacro:property name="shoulder_friction"  value="10" /> <!-- Nm ??? -->
+        <xacro:property name="shoulder_stiffness" value="600"/>  <!-- Nm/rads -->
+
+        <xacro:universal_shoulder 
+            name     = "${rover_name}_br_steering_arm_shoulder" 
+            parent   = "${rover_name}_small_chassis" 
+            lr_sign  = "-1" 
+            fb_sign  = "-1"
+            visual_xyz="0 0 0"
+            visual_rpy="0 0 -${pi/2}"
+            shoulder="br_steering_arm_shoulder"
+        />
+
+        <xacro:universal_shoulder 
+            name     = "${rover_name}_bl_steering_arm_shoulder" 
+            parent   = "${rover_name}_small_chassis" 
+            lr_sign  = "1" 
+            fb_sign  = "-1"
+            visual_xyz="0 0 0"
+            visual_rpy="0 0 -${pi/2}"
+            shoulder="bl_steering_arm_shoulder"
+        />
+
+
+        <!-- All the Knee joints & tibias -->
+        <xacro:include filename="../common/universal_tibia.xacro"/>
+        <xacro:property name="tibia_mesh" value="meshes/rovers/small_basic/small_ankle.dae"/>
+
+        <xacro:universal_tibia
+            name        = "${rover_name}_fr_steering_arm_tibia"
+            parent_name = "${rover_name}_fr_steering_arm_shoulder"
+            visual_xyz  = "0 0 0"
+            visual_rpy  = "0 0 ${pi/2}"
+            visual_scale = "0.5 0.5 0.5"
+            side_sign   = "-1" 
+            knee_joint_xyz="${steering_arm_length} 0 -0.12"
+            tibia="fr_steering_arm_tibia"/>
+
+        <xacro:universal_tibia
+            name        = "${rover_name}_fl_steering_arm_tibia"
+            parent_name = "${rover_name}_fl_steering_arm_shoulder"
+            visual_xyz  = "0 0 0"
+            visual_rpy  = "0 0 -${pi/2}"
+            visual_scale = "0.5 0.5 0.5"
+            side_sign   = "1" 
+            knee_joint_xyz="${steering_arm_length} 0 -0.12"
+            tibia="fl_steering_arm_tibia"/>
+
+        <xacro:universal_tibia
+            name        = "${rover_name}_bl_steering_arm_tibia"
+            parent_name = "${rover_name}_bl_steering_arm_shoulder"
+            visual_xyz  = "0 0 0"
+            visual_rpy  = "0 0 -${pi/2}"
+            visual_scale = "0.5 0.5 0.5"
+            side_sign   = "1" 
+            knee_joint_xyz="-${steering_arm_length} 0 -0.12"
+            tibia="bl_steering_arm_tibia"/>
+
+        <xacro:universal_tibia
+            name        = "${rover_name}_br_steering_arm_tibia"
+            parent_name = "${rover_name}_br_steering_arm_shoulder"
+            visual_xyz  = "0 0 0"
+            visual_rpy  = "0 0 ${pi/2}"
+            visual_scale = "0.5 0.5 0.5"
+            side_sign   = "-1" 
+            knee_joint_xyz="-${steering_arm_length} 0 -0.12"
+            tibia="br_steering_arm_tibia"/>
+   
+
+        <!-- general wheel constanbts -->
+        <xacro:property name="wheel_base"   value="1.0"/>
+        <xacro:property name="wheel_length" value="1.0"/>
+        <xacro:property name="wheel_radius" value="0.17"/>
+        <xacro:property name="wheel_mass"   value="1.0"/>
+        <xacro:property name="wheel_mesh"   value="meshes/rovers/common/wheel.dae"/>
+        <xacro:property name="wheel_velocity_limit" value="${2*pi}"/>
+
+        <!-- wheel axel properties -->
+        <xacro:property name="wheel_effort_limit" value="300.0"/>
+        <xacro:property name="wheel_damping"      value="0.1" />
+        <xacro:property name="wheel_friction"     value="0.0" />
+
+        <!-- wheel frictional model -->
+        <xacro:property name="wheel_mu1"   value="0.5"/>
+        <xacro:property name="wheel_mu2"   value="0.5"/>
+        <xacro:property name="wheel_slip2" value="0.0"/>
+
+        <!-- wheel torsional friction -->
+        <xacro:property name="wheel_torsional_coef"   value="0.25"/>
+        <xacro:property name="wheel_torsional_radius" value="0.025"/>
+
+        <!-- wheel contact model -->
+        <xacro:property name="wheel_kp"  value="1e12"/>
+        <xacro:property name="wheel_kd"  value="0.8"/>
+        <xacro:property name="wheel_soft_cfm" value="0.3"/>
+        <xacro:property name="wheel_maxVel"   value="0.015"/>
+        <xacro:property name="wheel_minDepth" value="0.10"/>
+
+        <xacro:include filename="../common/universal_wheel.xacro"/>
+        <xacro:small_wheel 
+            name="${rover_name}_fr_wheel"
+            parent_name="${rover_name}_fr_steering_arm_tibia"
+            visual_scale="0.55 0.55 0.55"
+            visual_rpy="0 0 ${pi/2}"
+            tibia_collision_length="-0.4"
+            lr_sign = "-1"
+            wheel="fr_wheel"/>
+
+        <xacro:small_wheel 
+            name="${rover_name}_fl_wheel"
+            parent_name="${rover_name}_fl_steering_arm_tibia"
+            visual_scale="0.55 0.55 0.55"
+            visual_rpy="0 0 ${pi/2}"
+            tibia_collision_length="-0.4"
+            lr_sign = "1" 
+            wheel="fl_wheel"/>
+
+        <xacro:small_wheel 
+            name="${rover_name}_br_wheel"
+            parent_name="${rover_name}_br_steering_arm_tibia"
+            visual_scale="0.55 0.55 0.55"
+            visual_rpy="0 0 ${pi/2}"
+            tibia_collision_length="-0.4"
+            lr_sign = "-1"
+            wheel="br_wheel"/>
+
+        <xacro:small_wheel 
+            name="${rover_name}_bl_wheel"
+            parent_name="${rover_name}_bl_steering_arm_tibia"
+            visual_scale="0.55 0.55 0.55"
+            visual_rpy="0 0 ${pi/2}"
+            tibia_collision_length="-0.4"
+            lr_sign = "1" 
+            wheel="bl_wheel"/>
+            
+        <!-- _______________________________________________________________________________________________________________
+            Common DRIVE, STEERING and BRAKE Plugins
+        -->
+        <gazebo>
+            <plugin name="rover_brake" filename="libRoverBrakePlugin.so"/>
+        </gazebo>
+
+        <!-- _______________________________________________________________________________________________________________
+            Localization
+        -->
+        <gazebo>
+            <plugin name="rover_localization" filename="libRoverLocalization.so"/>
+        </gazebo>
+
+    </xacro:macro>
+</robot>

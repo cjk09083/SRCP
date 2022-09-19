@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge Phase 2
+	NASA-JSC
+	Copyright (c) 2020, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+
+    <!-- large rover electronics -->
+    <xacro:macro name="large_rover_power">
+
+        <xacro:property name="battery_collision_x" value="0.5"/>
+        <xacro:property name="battery_collision_y" value="0.8"/>
+        <xacro:property name="battery_collision_z" value="0.5"/>
+        
+        <xacro:include filename="../common/universal_battery.xacro"/>
+        <xacro:universal_battery 
+            name        = "battery"
+            parent_name = "large_chassis"
+            offset_xyz  = "-0.4 0 0"
+            mass        = "20.0" />
+
+        <xacro:property name="panel_mass"          value="5.0"/>
+        <xacro:property name="panel_collision_x"   value="0.5"/>
+        <xacro:property name="panel_collision_y"   value="1.3"/>
+        <xacro:property name="panel_collision_z"   value="0.01"/>
+
+        <xacro:include filename="../common/universal_solar_panel.xacro"/>
+        <xacro:universal_solar_panel
+            name        = "left_solar_panel" 
+            parent_name = "battery"
+            offset_xyz  = "-0.8 -0.7 0.35"/>
+
+        <xacro:universal_solar_panel
+            name        = "right_solar_panel"
+            parent_name = "battery"
+            offset_xyz  = "-0.8 0.7 0.35"/>
+
+    </xacro:macro>
+</robot>

@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	This XACRO file defines the chassis macro for a test robot
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="chassis">
+
+        <link name="base_footprint" />
+
+        <joint name="base_joint" type="fixed">
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <parent link="base_footprint"/>
+            <child link="chassis"/>
+        </joint>
+
+        <link name='chassis'>
+            <collision>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+                </geometry>
+            </collision>
+            <visual>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <geometry>
+                    <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+                </geometry>
+            </visual>
+            <inertial>
+                <origin xyz="0 0 0" rpy="0 0 0"/>
+                <mass value="${chassis_mass}"/>
+                <box_inertia m="${chassis_mass}" x="${chassis_length}" y="${chassis_width}" z="${chassis_height}"/>
+            </inertial>
+        </link>
+
+        <gazebo reference="chassis">
+            <material>Gazebo/White</material>
+        </gazebo>
+
+    </xacro:macro>
+</robot>

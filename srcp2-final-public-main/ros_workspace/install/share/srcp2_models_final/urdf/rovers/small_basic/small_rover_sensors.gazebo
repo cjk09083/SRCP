@@ -1,0 +1,236 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	This XACRO file defines the small robot's sensors
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- We do not control the lidar plugin directly, so must choose whether to use noise or not here -->
+  <!-- <xacro:if value="${(arg use_noise) == 'false'}"/>
+    <xacro:property name="lidar_noise_sigma" value="0.0" />
+    <xacro:property name="imu_noise_sigma" value="0.0" /> 
+  </xacro:if> -->
+
+  <xacro:arg name="use_noise" default="true" />
+
+  <xacro:property name="lidar_noise_sigma" value="0.0" />
+  <xacro:property name="imu_noise_sigma" value="0.0" /> 
+
+  <xacro:if value="$(arg use_noise)">
+    <xacro:property name="lidar_noise_sigma" value="0.15" /> 
+    <xacro:property name="imu_noise_sigma" value="0.05" /> 
+  </xacro:if>
+
+  <xacro:property name="camera_hz" value="5.0" />
+  <xacro:property name="lidar_hz"  value="5.0" /> 
+
+   <!-- Hokuyo Lidar Laser -->
+  <gazebo reference="$(arg rover_name)_lidar_link">
+    <sensor name="head_hokuyo_sensor" type="gpu_ray">
+      <pose>0 0 0.0 0 0 ${pi/2}</pose>
+      <visualize>false</visualize>
+      <update_rate>${lidar_hz}</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>100</samples>
+            <resolution>1</resolution>
+            <min_angle>-1.3</min_angle>
+            <max_angle>1.3</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.0001</min>
+          <max>15.0</max>
+          <resolution>0.1</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>${lidar_noise_sigma}</stddev>
+        </noise>
+      </ray>
+      <plugin name="gazebo_ros_head_lidar_controller" filename="libgazebo_ros_gpu_laser.so" >
+        <topicName>laser/scan</topicName>
+        <frameName>/$(arg rover_name)_lidar_link</frameName>
+        <pose>0 0 0.0 0 0 ${pi/2}</pose>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+
+  <!-- This is the stereo camera -->
+  <!-- Stereo Camera Optical Left  -->
+  <gazebo reference="$(arg rover_name)_left_camera_optical">
+    <sensor type="camera" name="stereo_camera_left">
+      <update_rate>${camera_hz}</update_rate>
+      <camera name="camera/left">
+        <pose>0 0 0 1.57 -1.57 0</pose>
+        <horizontal_fov>1.3962634</horizontal_fov> 
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.02</near>
+          <far>500</far>
+        </clip>
+      </camera>
+
+      <plugin name="left_camera_controller" filename="libSpaceCamera.so">
+        <cameraName>camera/left</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <frameName>/$(arg rover_name)_left_camera_optical</frameName>
+        <hackBaseline>0.0</hackBaseline>
+        <distortionK1>0.0</distortionK1>
+        <distortionK2>0.0</distortionK2>
+        <distortionK3>0.0</distortionK3>
+        <distortionT1>0.0</distortionT1>
+        <distortionT2>0.0</distortionT2>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+   <!-- Stereo Camera Optical Right  -->
+  <gazebo reference="$(arg rover_name)_right_camera_optical">
+    <sensor type="camera" name="stereo_camera_right">
+      <update_rate>${camera_hz}</update_rate>
+      <camera name="camera/right">
+        <pose>0 0 0 1.57 -1.57 0</pose>
+        <horizontal_fov>1.3962634</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.02</near>
+          <far>500</far>
+        </clip>
+      </camera>
+
+      <plugin name="right_camera_controller" filename="libSpaceCamera.so">
+        <cameraName>camera/right</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <frameName>/$(arg rover_name)_right_camera_optical</frameName>
+        <hackBaseline>0.21</hackBaseline>
+        <distortionK1>0.0</distortionK1>
+        <distortionK2>0.0</distortionK2>
+        <distortionK3>0.0</distortionK3>
+        <distortionT1>0.0</distortionT1>
+        <distortionT2>0.0</distortionT2>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+
+  <gazebo reference="$(arg rover_name)_imu_link">
+    <!-- SOURCE CODE: https://github.com/ros-simulation/gazebo_ros_pkgs/tree/kinetic-devel/gazebo_plugins/src
+      file: gazebo_ros_imu_sensor.cpp
+    -->
+    <gravity>true</gravity>
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>100</update_rate>
+      <visualize>true</visualize>
+      <topic>__default_topic__</topic>
+      <plugin filename="libImuSensor.so" name="imu_plugin">
+        <topicName>imu</topicName>
+        <updateRateHZ>100.0</updateRateHZ>
+        <gaussianNoise>${imu_noise_sigma}</gaussianNoise>
+        <xyzOffset>0 0 0</xyzOffset>
+        <rpyOffset>0 0 0</rpyOffset>
+        <frameName>/$(arg rover_name)_imu_link</frameName>
+      </plugin>
+      <pose>0 0 0 0 0 0</pose>
+    </sensor>
+  </gazebo>
+
+
+    <gazebo>
+      <model name='light_model'>
+        <link name='$(arg rover_name)_light_link'>
+          <pose frame="$(arg rover_name)::light_model">0.425 0.470 0.512 -1.570769 0 0</pose>
+          <collision name='collision'>
+            <geometry>
+              <sphere>
+                <radius>0.025</radius>
+              </sphere>
+            </geometry>
+          </collision>
+          <inertial>
+              <inertia>
+                  <ixx>0.0</ixx>
+                  <ixy>0</ixy>
+                  <ixz>0</ixz>
+                  <iyy>0.0</iyy>
+                  <iyz>0</iyz>
+                  <izz>0.0</izz>
+              </inertia>
+              <mass>0.0001</mass>
+          </inertial>
+          <visual name='visual'>
+            <geometry>
+              <sphere>
+                <radius>0.025</radius>
+              </sphere>
+            </geometry>
+            <transparency>0.4</transparency>
+            <material>
+              <ambient>0.5 1 1 1</ambient>
+              <diffuse>1 1 1 1</diffuse>
+              <specular>1 1 1 1</specular>
+              <emissive>1 1 1 1</emissive>
+            </material>
+          </visual>
+          <light name='spotlight' type='spot'>
+            <pose>0 0 0.0 0 -1.570769 0</pose>
+            <attenuation>
+              <range>20</range>
+              <linear>0.01</linear>
+              <constant>0.0</constant>
+            </attenuation>
+            <diffuse>1 1 1 1</diffuse>
+            <specular>1 1 1 1</specular>
+            <spot>
+              <inner_angle>0.0</inner_angle>
+              <outer_angle>0.0</outer_angle>
+              <falloff>1.2</falloff>
+            </spot>
+            <direction>0 0 -1</direction>
+          </light>
+        </link>
+        <joint name='light_joint' type='fixed'>
+          <parent>$(arg rover_name)_sensor_bar</parent>
+          <child>$(arg rover_name)_light_link</child>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+        </joint>
+        <plugin name='light_control' filename='libFlashLightPlugin.so'>
+          <enable>true</enable>
+          <light>
+            <id>$(arg rover_name)_light_link/spotlight</id>
+            <duration>1.0</duration>
+            <interval>0.0</interval>
+            <color>1 0 0</color>
+          </light>
+        </plugin>
+      </model>
+    </gazebo>
+
+
+
+
+    <gazebo>
+      <plugin name='spotlight' filename='libSpotLightPlugin.so'/>
+    </gazebo>
+
+
+
+</robot>

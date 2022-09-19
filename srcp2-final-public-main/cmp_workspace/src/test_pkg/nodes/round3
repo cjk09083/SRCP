@@ -1,0 +1,2333 @@
+#!/usr/bin/env python
+
+# Authors: Hongik #
+
+import math
+import os
+import select
+import sys
+
+import rospy
+import rosservice
+import tf
+import time
+import ctypes
+import struct
+import tf2_ros
+
+# import pcl
+
+# from ._pcl import *
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, PoseWithCovarianceStamped, PoseStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan, Imu, Image, PointCloud2, PointField, JointState
+from srcp2_msgs.msg import VolSensorMsg, Qual3ScoringMsg
+from std_msgs.msg import Float64
+from tf.transformations import euler_from_quaternion
+from darknet_ros_msgs.msg import BoundingBoxes
+from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+
+import sensor_msgs.point_cloud2 as pc2
+import numpy as np
+import numpy.linalg as lin
+import matplotlib.pylab as plt
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+
+if os.name == 'nt':
+    import msvcrt
+else:
+    import tty, termios
+LINEAR_VEL = 0.22
+STOP_DISTANCE = 4.0
+STOP_DISTANCE_YOLO = 5.0
+LIDAR_ERROR = 0.1
+err_code = 0
+get_pose = True
+# get_pose = False
+
+SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR
+pub = rospy.Publisher('scout_1/skid_cmd_vel', Twist, queue_size=10)
+pub2 = rospy.Publisher('scout_1/sensor_controller/command', Float64, queue_size=10)
+odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
+scan_pub = rospy.Publisher("scan", LaserScan, queue_size=10)
+PoseWithCovarianceStamped_pub = rospy.Publisher("initialpose", PoseWithCovarianceStamped, queue_size=50)
+# rostopic pub /scout_1/sensor_controller/command std_msgs/Float64 "data: 0.5"
+
+FR_pub = rospy.Publisher("scout_1/fr_steering_arm_controller/command", Float64, queue_size=10)
+FL_pub = rospy.Publisher("scout_1/fl_steering_arm_controller/command", Float64, queue_size=10)
+BR_pub = rospy.Publisher("scout_1/br_steering_arm_controller/command", Float64, queue_size=10)
+BL_pub = rospy.Publisher("scout_1/bl_steering_arm_controller/command", Float64, queue_size=10)
+
+fr_float64 = Float64()
+fl_float64 = Float64()
+br_float64 = Float64()
+bl_float64 = Float64()
+
+light_data = 'high'  # stop / low / high
+light_service_name = '/scout_1/toggle_light'
+light_srv_class = rosservice.get_service_class_by_name(light_service_name)
+light_srv_client = rospy.ServiceProxy(light_service_name, light_srv_class)
+
+settings = termios.tcgetattr(sys.stdin)
+speed = 2.0
+tnspeed = 0.8
+sigma = 4
+goal_x = 0
+goal_y = 0
+
+roll = 0
+pitch = 0
+yaw = 0
+
+start_y = 0.0
+start_x = 0.0
+start_z = 0.0
+start_roll = 0.0
+start_pitch = 0.0
+start_yaw = 0.0
+
+bridge = CvBridge()
+frame = 0
+dt = 0.2
+A = np.array([[1, dt], [0, 1]])
+H = np.array([[1, 0]])
+Q = np.array([[0.001, 0], [0, 0.01]])
+R = 0.1
+P = 3 * np.eye(2)
+x_0 = 0.0
+xp = 0.0
+# xp2 = np.array([0, 0, 0])
+xp2 = 0
+
+call_step = 0
+
+yaw = 0.0
+yaw_d = 0.0
+yaw_o = 0.0
+center = 0.0
+center_of_cmd_x = 0.0
+width_raw = 0.0
+width_kf = 0.0
+distance = 0.0
+
+base_x = 0.0
+base_y = 0.0
+base_z = 0.0
+
+cal_x = 0.0
+cal_y = 0.0
+cal_x2 = 0.0
+cal_y2 = 0.0
+x_point = 0
+y_point = 0
+angle_point = np.zeros((360, 2))
+angle_filter_size = 40
+points = np.zeros((angle_filter_size, 2))
+pitch_points = np.zeros((angle_filter_size, 1))
+
+slam = False
+slam_check = False
+center_check = True
+turn_to_goal = False
+find_object = True
+
+turn_circle = False
+
+
+center_check_time = 0.0
+
+goal_set = 45
+goal = 1
+
+goal_point = [[base_x, base_y], [0, -45],
+              [-47, -3], [-47, -3],
+              [-38, 30], [-11, 43],
+              [34, 38], [47, 13],
+              [39, -22], [18, -49],
+              [-38, 30], [-11, 43],
+              [34, 38], [47, 13],
+              [39, -22], [18, -49]]
+
+dt = 0.2
+F = np.array([[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]])
+aX = 1
+G = np.array([[(dt * dt) / 2, 0], [0, (dt * dt) / 2], [dt, 0], [0, dt]])  # 4*2
+Qm = np.dot(np.dot(G, np.eye(2)), G.T)
+g_Xs = np.zeros((4, 1))
+g_Ps = np.eye(4)
+g_Ps[0, 0] = 100
+g_Ps[1, 1] = 100
+
+before_score_time = rospy.Time(0)
+
+base_center = 0
+base_y_center = 0
+base_rng = 0
+base_y_rng = 0
+
+rock_center = 0
+rock_rng = 0
+rock_y_center = 0
+rock_y_rng = 0
+rock_min = 0
+rock_max = 0
+rock_x_pose_min = 0
+rock_x_pose_max = 0
+rock_y_pose_min = 0
+rock_y_pose_max = 0
+
+v_index = 0
+vol_center = 0
+vol_y_center = 0
+vol_type = ""
+vol_rng = 0
+pre_vol_type = ""
+vol_index = 30
+pre_vol_index = 0
+vol_x = 0.0
+vol_y = 0.0
+vol_dis = 0.0
+vol_stop = False
+brake_data = 0.0
+vol_point = np.zeros((28, 5))
+# vol_type_array = np.empty((28, 1))
+# vol_type_array.astype(np.string_)
+vol_type_array = np.empty(28, dtype='<U16')
+# numpy.empty(10, dtype='s256')
+
+print(vol_type_array.dtype)
+
+hector_odom_x = 0.0
+hector_odom_y = 0.0
+
+odom_x = 0.0
+odom_y = 0.0
+odom_z = 0.0
+odom_roll = 0.0
+odom_pitch = 0.0
+odom_yaw = 0.0
+
+start_flag = 0
+
+imu_yaw = 0.0
+imu_pitch = 0.0
+imu_init = True
+
+far_from_base = [0.0, 0.0]
+
+object_index = 0
+object_distance = 0
+base_distance = 0
+
+object_x_center = 0
+object_y_center = 0
+
+object_x = 0.0
+object_y = 0.0
+object_z = 0.0
+
+true_object_x = -26.24
+true_object_y = 9.245
+true_object_z = 15.585
+
+true_base_x = 17.545
+true_base_y = -5.46
+true_base_z = 2.85
+
+object_locate_index = 0.0
+base_locate_index = 0.0
+object_size = 0.0
+base_size = 0.0
+
+angle_default = 0.0
+float64 = Float64()  # camera angle
+float64.data = angle_default
+
+marker_x_center = 0
+marker_x_range = 0
+marker_y_center = 0
+marker_y_range = 0
+
+find_object_time = 0.0
+
+score = 0
+calls = 0
+
+pre_obs_base_y = 0
+find_base_time = rospy.Time(0)
+
+imu_init = True
+
+bl_joint = 0.0
+
+find_both = False
+first_found_object = rospy.Time(0)
+
+
+def get_joint(joint_data):
+    global bl_joint
+    bl_joint = joint_data.position[1]
+
+
+def get_score(score_data):
+    global score, calls
+    score = score_data.score
+    calls = score_data.calls
+
+
+def odom_gen(scout1_data):
+    global start_x, start_y, start_z, start_roll, start_pitch, start_yaw, imu_init
+
+    start_pose = scout1_data.pose
+    init_x = start_pose.position.x
+    init_y = start_pose.position.y
+    init_z = start_pose.position.z
+
+    list_orientation = [start_pose.orientation.x, start_pose.orientation.y,
+                        start_pose.orientation.z, start_pose.orientation.w]
+    init_roll, init_pitch, init_yaw = euler_from_quaternion(list_orientation)
+
+    start_yaw = start_yaw - math.degrees(imu_yaw - init_yaw)
+    start_pitch = start_pitch - math.degrees(imu_pitch - init_pitch)
+
+    reset_odom_service_name = '/scout_1/reset_odom_to_pose'
+    reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+    reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+    reset_odom_srv_client(init_x, init_y, init_z, init_roll, init_pitch, init_yaw)
+
+    imu_init = False
+
+
+def srv_enable_robot_position_callback(robot_name, data):
+    rospy.wait_for_service(robot_name+'/get_true_pose')
+    try:
+        pose_service_name = robot_name+'/get_true_pose'
+        pose_srv_class = rosservice.get_service_class_by_name(pose_service_name)
+        pose_srv_client = rospy.ServiceProxy(pose_service_name, pose_srv_class)
+        robot_pos = pose_srv_client(data)
+        # robot_position_srv = rospy.ServiceProxy(robot_name+'/get_true_pose', LocalizationSrv)
+        # robot_pos = robot_position_srv(data)
+        print(robot_pos)
+        odom_gen(robot_pos)
+        return robot_pos
+    except rospy.ServiceException as e:
+        print("Get true pose Service call failed: %s" % e)
+        pass
+
+
+def on_new_point_cloud(ros_point_cloud):
+    # print("Got point cloud!!!!!!!!!!!!!!!")
+    # print("Got point cloud!!!!!!!!!!!!!!!")
+
+    try:
+        global object_index, object_distance, object_x, object_y, object_z, base_x, base_y, base_z, \
+            object_locate_index, base_locate_index, object_size, base_size, base_distance
+        # print("fields", ros_point_cloud.fields)
+        # print("width", ros_point_cloud.width)
+        # print("point_step ", ros_point_cloud.point_step )
+        # print("row_step", ros_point_cloud.row_step)
+        # print("data", type(ros_point_cloud.data))
+        before_x, before_y, before_z, before_R, before_G, before_B = 0, 0, 0, 0, 0, 0
+
+        tf_buffer = tf2_ros.Buffer()
+        listener = tf2_ros.TransformListener(tf_buffer)
+        # transform = tf_buffer.lookup_transform('scout_1_tf/left_camera_optical', 'map',
+        #                                        rospy.Time(), rospy.Duration(1.0))
+        transform = tf_buffer.lookup_transform('scout_1/odom', ros_point_cloud.header.frame_id,
+                                               rospy.Time(0), rospy.Duration(1.0))
+        # print(ros_point_cloud.header)
+        trans_cloud = do_transform_cloud(ros_point_cloud, transform)
+        gen = pc2.read_points(trans_cloud, skip_nans=True)
+        int_data = list(gen)
+
+        gen_origin = pc2.read_points(ros_point_cloud, skip_nans=True)
+        origin_data = list(gen_origin)
+
+        index = 0
+        object_index = 0
+        object_distance_total = 0
+        object_x_total = 0.0
+        object_y_total = 0.0
+        object_z_total = 0.0
+        object_r = 0.0
+        object_g = 0.0
+        object_b = 0.0
+        base_index = 0
+        base_distance_total = 0
+        base_x_total = 0.0
+        base_y_total = 0.0
+        base_z_total = 0.0
+        object_locate_index = 0
+        object_locate_index_total = 0
+        base_locate_index, object_size, base_size = 0, 0, 0
+        # print("Point counts", len(int_data))
+
+        for x in int_data:
+            # print("X counts", len(x))
+            # print("type is ", type(x[1]))
+            # cast float32 to int so that bitwise operations are possible
+            s = struct.pack('>f', x[3])
+            i = struct.unpack('>l', s)[0]
+            # you can get back the float value by the inverse operations
+            pack = ctypes.c_uint32(i).value
+            # print("pack Value", pack)
+            r = (pack & 0x00FF0000) >> 16
+            g = (pack & 0x0000FF00) >> 8
+            b = (pack & 0x000000FF)
+
+            if r > 100 and b < 50:
+                if before_x == 0 and before_y == 0:
+                    before_x, before_y, before_z, before_R, before_G, before_B = x[0], x[1], x[2], r, g, b
+
+                # if abs(x[0] - true_object_x) < 3 and abs(x[1] - true_object_y) < 3 and abs(
+                #         x[2] - true_object_z) < 3:
+                #     print("Index %d, x : %f, y : %f, z : %f" % (index, x[0], x[1], x[2]))
+                #     print("Index %d, r : %d, g : %d, b : %d" % (index, r, g, b))
+
+                if abs(x[0] - before_x) < 3 and abs(x[1] - before_y) < 3 and abs(x[2] - before_z) < 3:
+                    distance_pc2 = math.sqrt(pow(origin_data[index][0], 2)
+                                             + pow(origin_data[index][1], 2) + pow(origin_data[index][2], 2))
+                    # print("Index %d, x : %f, y : %f, z : %f" % (index, x[0], x[1], x[2]))
+                    # print("Index %d, r : %d, g : %d, b : %d" % (index, r, g, b))
+                    # print("Index %d, distance : %f" % (index, distance_pc2))
+                    # print("Index %d, distance2 : %f" % (index, distance_from_odom))
+                    if g < 500:
+                        object_index += 1
+                        object_distance_total += distance_pc2
+                        object_x_total += x[0]
+                        object_y_total += x[1]
+                        object_z_total += x[2]
+                        object_locate_index_total += index
+                        object_locate_index = index
+
+                    if r > 250:
+                        base_index += 1
+                        base_distance_total += distance_pc2
+                        base_locate_index = index
+                        base_x_total += x[0]
+                        base_y_total += x[1]
+                        base_z_total += x[2]
+                else:
+                    if object_index > 1:
+                        object_size = object_index
+                        object_distance = object_distance_total / object_index
+                        object_distance /= 1
+
+                        object_x = object_x_total / object_index
+                        object_y = object_y_total / object_index
+                        object_z = object_z_total / object_index
+                        #
+                        # tilt = float64.data - imu_pitch
+                        # object_z = object_distance * math.sin(tilt)
+                        # r_xy = object_distance * math.cos(tilt)
+                        # object_x = r_xy * math.cos(odom_yaw)
+                        # object_y = r_xy * math.sin(odom_yaw)
+
+                    object_index = 0
+                    object_distance_total = 0
+                    object_x_total = 0
+                    object_y_total = 0
+                    object_z_total = 0
+                    object_locate_index_total = 0
+                    object_locate_index = 0
+
+                before_x, before_y, before_z, before_R, before_G, before_B = x[0], x[1], x[2], r, g, b
+
+            # xyz = np.append(xyz, [[x[0], x[1], x[2]]], axis=0)
+            # rgb = np.append(rgb, [[r, g, b]], axis=0)
+            # print("xyz", xyz)
+            # print("rgb", rgb)
+            index += 1
+
+        if object_index > 1:
+            object_size = object_index
+            object_distance = object_distance_total / object_index
+            object_distance /= 1
+
+            object_x = object_x_total / object_index
+            object_y = object_y_total / object_index
+            object_z = object_z_total / object_index
+            #
+            # tilt = float64.data - imu_pitch
+            # object_z = object_distance * math.sin(tilt)
+            # r_xy = object_distance * math.cos(tilt)
+            # object_x = r_xy * math.cos(odom_yaw)
+            # object_y = r_xy * math.sin(odom_yaw)
+        else:
+            object_distance = 1
+            object_x = 0.0
+            object_y = 0.0
+            object_z = 0.0
+            object_size = 1
+
+        if base_index > 1:
+            base_size = base_index
+            base_distance = base_distance_total / base_index
+            base_distance *= 1.03
+
+            # base_x = base_x_total / base_size
+            # base_y = base_y_total / base_size
+            # base_z = base_z_total / base_size
+
+            # print("Found Base", base_size, "distance : ", base_distance)
+        else:
+            base_distance = 1
+            base_size = 1
+        # print("object_index", object_index)
+
+    except Exception as e:
+        global err_code
+        err_code = 17
+        print("Point Cloud except Error", e)
+        pass
+
+
+def imu_callback(incomming_msg):
+    try:
+        list_orientation = [incomming_msg.orientation.x, incomming_msg.orientation.y,
+                            incomming_msg.orientation.z, incomming_msg.orientation.w]
+        rolls, pitchs, yaws = euler_from_quaternion(list_orientation)
+        global imu_yaw, imu_pitch, points, angle_point, start_yaw, imu_init, start_pitch
+        yaw_or = math.radians(math.degrees(yaws) + start_yaw)
+
+        point = np.array([math.cos(yaw_or), math.sin(yaw_or)])
+
+        N_size = angle_filter_size
+        global x_point, y_point
+        x_point = 0
+        y_point = 0
+        pitch_sum = 0
+        for i in range(N_size, 1, -1):
+            points[i - 1] = points[i - 2]
+            pitch_points[i - 1] = pitch_points[i - 2]
+            x_point = x_point + points[i - 1][0]
+            y_point = y_point + points[i - 1][1]
+            pitch_sum = pitch_sum + pitch_points[i - 1]
+        points[0] = point
+        pitch_points[0] = pitchs
+        x_point = x_point + points[0][0]
+        y_point = y_point + points[0][1]
+        pitch_sum = pitch_sum + pitch_points[0]
+        # print(points[0])
+        # rospy.loginfo("point is [%f , %f]", point[0], point[1])
+
+        x_point = x_point / N_size
+        y_point = y_point / N_size
+        if imu_init:
+            init_yaw = math.atan2(y_point, x_point)
+            init_pitch = pitch_sum / N_size
+            if start_yaw != 0 and points[N_size - 1][0] != 0:
+                start_yaw = start_yaw - (math.degrees(init_yaw) - yaw_d)
+                start_pitch = start_pitch - (math.degrees(init_pitch) - math.degrees(pitch))
+                imu_init = False
+
+        else:
+            imu_pitch = pitch_sum / N_size
+            imu_yaw = math.atan2(y_point, x_point)
+    except ValueError as e:
+        global err_code
+        err_code = 1
+        print("imu_callback except Error", e)
+        pass
+
+
+def odom_callback(odom_data):
+    try:
+        global start_flag, odom_x, odom_y, odom_z, odom_roll, odom_pitch, odom_yaw, roll, pitch, yaw, yaw_d, \
+            start_x, start_y, start_z, start_roll, start_pitch, start_yaw, speed
+        now_pose = odom_data.pose.pose
+        odom_x = now_pose.position.x
+        odom_y = now_pose.position.y
+        odom_z = now_pose.position.z
+
+        list_orientation = [now_pose.orientation.x, now_pose.orientation.y,
+                            now_pose.orientation.z, now_pose.orientation.w]
+        odom_roll, odom_pitch, odom_yaw = euler_from_quaternion(list_orientation)
+
+        if odom_yaw != 0:
+            roll = odom_roll
+            pitch = odom_pitch
+            yaw = odom_yaw
+            yaw_d = math.degrees(odom_yaw)
+            # if math.degrees(pitch) < -10:
+            #     speed = speed + 0.1
+            # else:
+            #     speed = 2.0
+
+        if start_flag == 0:
+            start_flag = 1
+            start_x = odom_x
+            start_y = odom_y
+            start_z = odom_z
+            start_yaw = yaw_d
+            start_pitch = odom_pitch
+        #     scout_1_pos = srv_enable_robot_position_callback('/scout_1',True)
+        #     odom_gen(scout_1_pos)
+    except Exception as e:
+        global err_code
+        err_code = 2
+        print("odom_callback except Error")
+        pass
+
+
+def box(data):
+    try:
+        global rock_center, rock_rng, rock_y_center, rock_y_rng, vol_center, vol_rng, \
+            base_center, base_y_center, base_rng, base_y_rng, vol_y_center, object_x_center, object_y_center,\
+            marker_x_center, marker_x_range, pre_obs_base_y, find_base_time, find_both
+
+        # 0.Volatile, 1.Rock, 2.Base, 3.Object, 4.Marker
+        rock_center = 0
+        rock_rng = 0
+        rock_y_center = 0
+        rock_y_rng = 0
+        vol_center = 0
+        vol_rng = 0
+        pre_rock_center = 0
+        pre_rock_rng = 0
+        pre_rock_y_center = 0
+        pre_rock_y_rng = 0
+        pre_vol_center = 0
+        pre_vol_y_center = 0
+        marker_x_center = 0
+        marker_x_range = 0
+        object_temp_center = 0
+        base_temp_center = 0
+        base_center = 0
+
+        for box in data.bounding_boxes:
+            if box.id == 1 and (box.xmax - box.xmin) > 80:
+                rock_center = (box.xmax + box.xmin) / 2
+                rock_rng = box.xmax - box.xmin
+                rock_y_center = (box.ymax + box.ymin) / 2
+                rock_y_rng = box.ymax - box.ymin
+                if rock_rng < pre_rock_rng:
+                    rock_center = pre_rock_center
+                    rock_rng = pre_rock_rng
+                    rock_y_center = pre_rock_y_center
+                    rock_y_rng = pre_rock_y_rng
+                pre_rock_center = rock_center
+                pre_rock_rng = rock_rng
+                pre_rock_y_center = rock_y_center
+                pre_rock_y_rng = rock_y_rng
+            elif box.id == 2:
+                base_temp_center = (box.xmax + box.xmin) / 2
+                base_rng = box.xmax - box.xmin
+                base_y_center = (box.ymax + box.ymin) / 2
+                base_y_rng = box.ymax - box.ymin
+                pre_obs_base_y = box.ymax
+                if 10 < base_temp_center < 630:
+                    base_center = base_temp_center
+                find_base_time = rospy.Time.now()
+            elif box.id == 3:
+                object_temp_center = (box.xmax + box.xmin) / 2
+                if abs(box.ymax - pre_obs_base_y) > 10 and (rospy.Time.now() - find_base_time).to_sec() > 0.5:
+                    object_x_center = (box.xmax + box.xmin) / 2
+                    object_y_center = (box.ymax + box.ymin) / 2
+            elif box.id == 4:
+                marker_x_center = (box.xmax + box.xmin) / 2
+                marker_x_range = box.xmax - box.xmin
+
+        if base_temp_center * object_temp_center != 0:
+            find_both = True
+        else:
+            find_both = False
+
+
+
+    except Exception as e:
+        global err_code
+        err_code = 4
+        print("box except Error", e)
+        pass
+
+
+def kf(x_new):
+    try:
+        global xp, P, R
+        Pp = np.dot(np.dot(A, P), A.T) + Q
+        K = np.dot(np.dot(Pp, H.T), lin.inv(np.dot(np.dot(H, Pp), H.T) + R))
+        x = xp + K * (x_new - np.dot(H, xp))
+        P = Pp - np.dot(np.dot(K, H), Pp)
+        xp = x
+        return x
+    except Exception as e:
+        global err_code
+        err_code = 5
+        return x_new
+
+
+def kf2(x_new):
+    try:
+        global xp2, P, R
+        Pp = np.dot(np.dot(A, P), A.T) + Q
+        K = np.dot(np.dot(Pp, H.T), lin.inv(np.dot(np.dot(H, Pp), H.T) + R))
+        x = xp2 + K * (x_new - np.dot(H, xp2))
+        P = Pp - np.dot(np.dot(K, H), Pp)
+        xp2 = x
+        return x
+    except Exception as e:
+        global err_code
+        err_code = 5
+        return x_new
+
+
+def image_callback(msg):
+    try:
+        global frame, cal_x, cal_y, distance, center, width_raw, width_kf, slam_check, center_check, err_code
+        frame = frame + 1
+
+        if frame % 1 == 0:
+            try:
+                # Convert your ROS Image message to OpenCV2
+                img = bridge.imgmsg_to_cv2(msg, "rgb8")
+                bgr_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                hsv_img = cv2.cvtColor(bgr_img, cv2.COLOR_RGB2HSV)
+                lower_orange = (105, 105, 50)
+                upper_orange = (120, 255, 255)
+
+                img_mask = cv2.inRange(hsv_img, lower_orange, upper_orange)
+                # Momphlogy cal in mask for remove noise
+                k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+                img_mask = cv2.erode(img_mask, k)
+                img_mask = cv2.dilate(img_mask, k)
+
+                con_img, contour, hierarchy = cv2.findContours(img_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+                contour_area_list = []
+                contour_cx_list = []
+                contour_cy_list = []
+
+                i = 0
+                for com in contour:
+                    i = i + 1
+                    mmt = cv2.moments(com)
+                    contour_area_list.append(mmt['m00'])
+                    # print(mmt['m00'])
+                    cx = int(mmt['m10'] / mmt['m00'])
+                    contour_cx_list.append(cx)
+                    cy = int(mmt['m01'] / mmt['m00'])
+                    contour_cy_list.append(cy)
+
+                if contour_cy_list and contour_cx_list:
+                    max_contour_index = contour_area_list.index(max(contour_area_list))
+                    d_length = math.sqrt(max(contour_area_list))
+                    durm_index = []
+                    i = 0
+                    for c in contour_cy_list:
+                        if contour_cy_list[max_contour_index] + d_length > c > \
+                                contour_cy_list[max_contour_index] - d_length:
+                            durm_index.append(i)
+                        i = i + 1
+                    outside_durm = []
+                    for c in durm_index:
+                        x, y, w, h = cv2.boundingRect(contour[c])
+                        outside_durm.append(x)
+                        outside_durm.append(x + w)
+
+                    # calculate commender's centor, width
+                    center_of_cmd_x = int((min(outside_durm) + max(outside_durm)) / 2)
+                    width_of_cmd = int(max(outside_durm) - min(outside_durm))
+
+                    width_raw = width_of_cmd
+                    width_kf = float(kf(width_of_cmd)[0][0])
+                    # print('width of base(kf): %g' % kf(width_of_cmd))
+
+                    # print('width of base(kf): %d' % a_KF)
+
+                    # final data
+                    if width_kf == 0:
+                        width_kf = 1
+                    distance_for_command = 2275 / width_kf - 0.4317
+                    # print('result_distance: %s' % distance_for_command)
+                    center = center_of_cmd_x
+                    distance = distance_for_command
+                    cal_x = -distance * math.cos(odom_yaw)
+                    cal_y = -distance * math.sin(odom_yaw)
+
+                    # if distance > 50 and slam_check:
+                    #     slam_check = False
+                    #     center_check = False
+
+            except CvBridgeError as e:
+                err_code = 6
+                print("image callback except Error")
+                print(e)
+                pass
+    except Exception as e:
+        err_code = 6
+        print("image callback except Error")
+        pass
+
+
+class Obstacle:
+    def __init__(self):
+        # self._cmd_pub = rospy.Publisher('scout_1/skid_cmd_vel', Twist, queue_size=1)
+        self.obstacle()
+
+    def getKey(self):
+        if os.name == 'nt':
+            return msvcrt.getch()
+        tty.setraw(sys.stdin.fileno())
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if rlist:
+            key = sys.stdin.read(1)
+        else:
+            key = ''
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+        return key
+
+    def cmd_check(self, target_linear_vel, target_angular_vel, turtlebot_moving, GTG):
+        try:
+            key = self.getKey()
+            global goal_x, goal_y, slam, goal, center_check, center, turn_to_goal, find_object_time, \
+                fr_float64, fl_float64, br_float64, bl_float64, find_object, object_x_center, turn_circle
+
+            if key == 'w':
+                goal_x = 0
+                goal_y = 0
+                target_linear_vel = speed
+                target_angular_vel = 0
+                turtlebot_moving = True
+                GTG = False
+                rospy.loginfo('Forward!!')
+                rospy.loginfo('Forward!!')
+                rospy.loginfo('Forward!!')
+
+                fr_float64.data = 0.0
+                fl_float64.data = 0.0
+                br_float64.data = 0.0
+                bl_float64.data = 0.0
+            elif key == 'x':
+                goal_x = 0
+                goal_y = 0
+                target_linear_vel = -speed
+                target_angular_vel = 0
+                turtlebot_moving = False
+                GTG = False
+                rospy.loginfo('Backward!!')
+                rospy.loginfo('Backward!!')
+                rospy.loginfo('Backward!!')
+
+                fr_float64.data = 0.0
+                fl_float64.data = 0.0
+                br_float64.data = 0.0
+                bl_float64.data = 0.0
+            elif key == 'a':
+                target_angular_vel = tnspeed
+                target_linear_vel = 0
+                turtlebot_moving = False
+                GTG = False
+                rospy.loginfo('Turn left!!!')
+                rospy.loginfo('Turn left!!!')
+                rospy.loginfo('Turn left!!!')
+
+                fr_float64.data = 0.78
+                fl_float64.data = -0.78
+                br_float64.data = -0.78
+                bl_float64.data = 0.78
+            elif key == 'd':
+                target_angular_vel = -tnspeed
+                target_linear_vel = 0
+                turtlebot_moving = False
+                GTG = False
+                rospy.loginfo('Turn right!!!')
+                rospy.loginfo('Turn right!!!')
+                rospy.loginfo('Turn right!!!')
+
+                fr_float64.data = 0.78
+                fl_float64.data = -0.78
+                br_float64.data = -0.78
+                bl_float64.data = 0.78
+            elif key == 'm':
+                center_check = False
+                center = 600
+                slam = True
+                goal = 1
+                goal_x = goal_point[goal][0]
+                goal_y = goal_point[goal][1]
+                turtlebot_moving = False
+                GTG = True
+                rospy.loginfo('Slam!!!')
+                fr_float64.data = 0.78
+                fl_float64.data = -0.78
+                br_float64.data = -0.78
+                bl_float64.data = 0.78
+            elif key == 'z':
+                center_check = False
+                center = 600
+                rospy.loginfo('Find base!!!')
+                fr_float64.data = 0.78
+                fl_float64.data = -0.78
+                br_float64.data = -0.78
+                bl_float64.data = 0.78
+            elif key == 'c':
+                find_object = False
+                object_x_center = 630
+                rospy.loginfo('Find Object!!!')
+                fr_float64.data = 0.78
+                fl_float64.data = -0.78
+                br_float64.data = -0.78
+                bl_float64.data = 0.78
+            elif key == 'f':
+                rospy.loginfo('Go Circle!!!')
+                target_linear_vel = 0.0
+                target_angular_vel = 0.0
+                turn_circle = True
+                width = 1.87325
+                length = 1.5748
+                base_range = 10
+                fr_float64.data = math.radians(90) - math.atan2(length, base_range-(width/2))
+                fl_float64.data = -math.radians(90)
+                br_float64.data = math.radians(90) - math.atan2(length, base_range+(width/2))
+                bl_float64.data = -math.radians(90)
+            elif key == 's':
+                goal_x = 0
+                goal_y = 0
+                target_linear_vel = 0.0
+                target_angular_vel = 0.0
+                center_check = True
+                find_object = True
+                slam = False
+                goal = 0
+                turtlebot_moving = False
+                turn_to_goal = False
+                GTG = False
+                turn_circle = False
+                rospy.loginfo('Stop!!')
+                rospy.loginfo('Stop!!')
+                rospy.loginfo('Stop!!')
+
+                fr_float64.data = 0.78
+                fl_float64.data = -0.78
+                br_float64.data = -0.78
+                bl_float64.data = 0.78
+            elif key == 'g':
+                GTG = True
+                rospy.loginfo('Go to goal!!')
+            elif key == 'j':
+                goal_x = goal_x - 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'l':
+                goal_x = goal_x + 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'i':
+                goal_y = goal_y + 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'k':
+                goal_y = goal_y - 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'q':
+                rospy.loginfo('Quit!!')
+                quit()
+                #os.system("")
+                rospy.signal_shutdown("Quit signal")
+            return target_linear_vel, target_angular_vel, turtlebot_moving, GTG
+        except Exception as e:
+            global err_code
+            if err_code == 0:
+                err_code = 8
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            return target_linear_vel, target_angular_vel, turtlebot_moving, GTG
+            pass
+
+    def cal(self, x, y, z, angle, dis, gradient, dt, twists):
+        global err_code
+        try:
+            # x_pose,y_pose,z_pose=self.cal(x_pose,y_pose,z_pose,angle,interval*1.5,0)
+            if dt == 0:
+                dt = 0.1
+                err_code = 9
+                print("cal dt zero Error")
+            theta = math.radians(angle)
+            alpha = gradient
+            ran = dis / sigma
+            r_dot = ran * math.cos(alpha)
+            x_dot = r_dot * math.cos(theta)
+            y_dot = r_dot * math.sin(theta)
+            z_dot = ran * math.sin(alpha)
+            x = x + x_dot
+            y = y + y_dot
+            z = z - z_dot
+
+            velEst = np.array([x_dot / dt, y_dot / dt])
+
+            return x, y, z, velEst
+        except Exception as e:
+            err_code = 9
+            print("cal except Error")
+            return x, y, z, 0.0
+
+    def obstacle(self):
+        global turn_to_goal, vol_rng, goal_x, goal_y, center_check, slam_check, goal, dt, start_flag, \
+            base_x, base_y, goal_point, center, speed, far_from_base, err_code, vol_dis, vol_stop, brake_data, \
+            fr_float64, fl_float64, br_float64, bl_float64, vol_point, float64, find_object_time, \
+            find_object, call_step, object_x_center, marker_x_center, turn_circle, \
+            slam, base_center, first_found_object, object_y_center
+
+        auto_start = True
+
+        twist = Twist()
+
+        turning = False
+        pre_turn = False
+        turtlebot_moving = False
+        GTG = False
+        boundary = False
+
+        real_goal = [0.0, 0.0]
+        step_goal = False
+        reset_odom = False
+
+        stuck_flag = 0
+        sensor_angle = 0.0
+        range_start = 10
+        range_stop = 90
+        angle_range = range(0, 100)  # 0~100 is 0~180 degree,
+        target_linear_vel = 0.0
+        target_angular_vel = 0.0
+        clock = rospy.get_time()
+        current_time = rospy.Time.now()
+        last_time = rospy.Time.now()
+        x_pose = start_x
+        y_pose = start_y
+        z_pose = start_z
+        interval = 0.0
+        angle = 0.0
+        target_x = 0
+        target_y = 0
+        target_angle = 0
+        obs_flag = 0
+        volt_flag = 0
+        turn_flag = 0
+        center_check_flag = 0
+        object_check_flag = 0
+        pre_x_pose = 0.0
+        pre_y_pose = 0.0
+        pre_yaw = 0.0
+        light_data_f = 1.0
+        center_chk_time = rospy.Time.now()
+        move_wait_time = rospy.Time.now()
+        wait_x_pose = 0.0
+        wait_y_pose = 0.0
+        pre_center = 0.0
+        base_flag = 0
+        first_found_object_flag = 0
+        pre_fl_float64 = 0
+        before_call_time = rospy.Time.now()
+        find_time = 80.0
+        forward_time = 30.0
+        go_time = find_time + forward_time
+        get_pose_result = 0
+        backward_flag = 0
+        time_offset = 0.0
+        recall_time = 0.0
+
+        finding_object_goal_x = 0
+        finding_object_goal_y = 0
+        find_both_go = False
+        # rospy.loginfo('Change sensor to %f', float64.data)
+        # if float64.data != 0:
+        #     for i in range(500):
+        #         pub2.publish(float64)
+        #         rospy.loginfo('Change sensor to %f', float64.data)
+
+        float64.data = 0.35
+
+        if auto_start:
+            find_object = False
+            object_x_center = 630
+            rospy.loginfo('Find Object!!!')
+            fr_float64.data = 0.78
+            fl_float64.data = -0.78
+            br_float64.data = -0.78
+            bl_float64.data = 0.78
+
+        while not rospy.is_shutdown():
+            # rospy.loginfo('rospy.is_shutdown()? %s', rospy.is_shutdown())
+            try:
+                rospy.loginfo('Try start')
+
+                pub2.publish(float64)
+                pre_mindistance = 200
+                pre_index = 0
+                min_distance = 200
+                index = 0
+                target_linear_vel, target_angular_vel, turtlebot_moving, GTG = \
+                    self.cmd_check(target_linear_vel, target_angular_vel, turtlebot_moving, GTG)
+                try:
+                    scan = rospy.wait_for_message('scout_1/laser/scan', LaserScan, timeout=1)
+                except rospy.ROSException as e:
+                    # rospy.loginfo('Timeout while waiting for scan info')
+                    # rospy.logerr("Timeout while waiting for scan info!")
+                    err_code = 15
+                    raise e
+                scan_result = LaserScan()
+                scan_result.header = scan.header
+                scan_result.angle_increment = scan.angle_increment
+                scan_result.angle_min = scan.angle_min
+                scan_result.angle_max = scan.angle_max
+                scan_result.intensities = scan.intensities
+                scan_result.scan_time = scan.scan_time
+                scan_result.range_max = 100.0
+                con_ref = 35
+                con = con_ref
+                obs_start = 0
+                obs_index = 0
+                obs_end = 0
+                angle_add = 0
+                turn_dir = 0
+                pre_turn_dir = 0
+                obs_i = []
+                obs_r = [float('inf') for _ in angle_range]
+                max_con = 0
+                pre_lidar_distances = 0
+                pre2_lidar_distances = 0
+
+                max_distance = 9.5
+
+                max_i = 0
+                avoid_ref = 45
+                too_close = 0
+                tc_start = 0
+                tc_end = 0
+                turning = False
+                con_end = False
+                rospy.loginfo('Try start2')
+
+                for i in angle_range:
+                    lidar_distances = scan.ranges[i]
+
+                    #  YOLO
+                    if not (rock_center - rock_rng / 2 > 320 + avoid_ref
+                            or rock_center + rock_rng / 2 < 320 - avoid_ref) \
+                            or not (base_center - base_rng / 2 > 320 + avoid_ref
+                                    or base_center + base_rng / 2 < 320 - avoid_ref):
+                        if lidar_distances < STOP_DISTANCE_YOLO and lidar_distances != 0 \
+                                and ((rock_y_rng > 250 and 160 < rock_y_center < 280 and rock_rng > 180)
+                                     or (base_y_rng > 200 and 160 < base_y_center < 280)):
+                            min_distance = lidar_distances
+                            if obs_start == 0:
+                                obs_start = i
+                            index = i
+                            if obs_start != 0:
+                                obs_end = i
+                            obs_r[i] = lidar_distances
+                            if lidar_distances > pre_mindistance:
+                                min_distance = pre_mindistance
+                                index = pre_index
+                            pre_mindistance = min_distance
+                            pre_index = index
+
+                    if not turning and math.sqrt(pow(x_pose, 2) + pow(y_pose, 2)) > 10:
+                        #  CONTINUITY
+                        if i >= 99:
+                            con += con_ref
+                        if not con_end and lidar_distances != 0:
+                            if lidar_distances < 1:
+                                if tc_start == 0:
+                                    tc_start = i
+                                too_close = too_close + 1
+                                tc_end = i
+                            if con == 0:
+                                obs_start = i
+                            if abs((pre2_lidar_distances + pre_lidar_distances) / 2
+                                   - (pre_lidar_distances + lidar_distances) / 2) < 2:
+                                con = con + 1
+                            else:
+                                con_end = True
+                        else:
+                            if con > max_con:
+                                max_con = con
+                            if 15 < con < 95:
+                                rospy.loginfo('Continous %d : MAX is %d , i: %d !!', con, max_con, i)
+                            if 15 < con < con_ref:
+                                for con_index in range(obs_start, i):
+                                    # obs_i.append(con_index)
+                                    obs_r[con_index] = scan.ranges[con_index]
+                                min_distance = pre_mindistance
+                                if min_distance < STOP_DISTANCE:
+                                    index = pre_index
+                                    # rospy.loginfo('Find obs %f !!', obs_index)
+
+                                    rospy.loginfo('Find obs con %d to %d !! r=%f, i=%f',
+                                                  obs_start, i, min_distance, index)
+                                    obs_index = obs_index + 1
+                                    pre_mindistance = 200
+                                    max_i = i
+                                    turning = True
+                                    if abs(math.degrees(odom_pitch)) > 10:  # too H/L angle don't turn
+                                        rospy.loginfo('Too H/L angle : %f', math.degrees(odom_pitch))
+                                        # turning = False
+                            con = 0
+                            con_end = False
+                        if pre_mindistance > lidar_distances:
+                            pre_mindistance = lidar_distances
+                            pre_index = i
+                            # rospy.loginfo('LOW! %f, %f', min_distance,i)
+                    pre2_lidar_distances = pre_lidar_distances
+                    pre_lidar_distances = lidar_distances
+
+                if abs(obs_start - obs_end) < 40 and 40 < (obs_start + obs_end) / 2 < 60:
+                    if not turning:
+                        rospy.loginfo('Find obs yolo %d to %d !! r=%f, i=%f,  x=%f, y=%f',
+                                      obs_start, obs_end, min_distance, (obs_start + obs_end) / 2,
+                                      rock_center, rock_y_center)
+                    turning = True
+                    max_i = obs_end
+                    index = (obs_start + obs_end)/2
+
+                if rock_rng > 200:
+                    if rock_center > 320:
+                        index = (640 - (rock_center - rock_rng / 2)) * 100 / 640
+                        if index > 50:
+                            index = 49
+                    else:
+                        index = (640 - (rock_center + rock_rng / 2)) * 100 / 640
+                        if index < 50:
+                            index = 51
+                    min_distance = 4.33
+                    turning = True
+                    rospy.loginfo('Too big obs!! index :  %d', index)
+
+                if turtlebot_moving or GTG:
+                    target_linear_vel = speed
+
+                if turning:
+                    rospy.loginfo('Turn_flag up!! : %f', turn_flag)
+                    if turn_flag < 3:
+                        turning = False
+                    turn_flag = turn_flag + 1
+
+                else:
+                    rospy.loginfo('Turn_flag do!! : %f', turn_flag)
+                    turn_flag = turn_flag - 1
+                    if turn_flag < 0:
+                        turn_flag = 0
+
+                if too_close > 5:
+                    index = (tc_start + tc_end) / 2
+                    rospy.loginfo('Too close : %d , index: %d , %d to %d', too_close, index, tc_start, tc_end)
+                    turning = True
+                    for con_index in range(tc_start, tc_end):
+                        # obs_i.append(con_index)
+                        obs_r[con_index] = scan.ranges[con_index]
+
+                rospy.loginfo('Check!! Turning : %d, GTG : %d, TM : %d, CC : %d, TTG : %d, SLAM : %d',
+                              turning, GTG, turtlebot_moving, center_check, turn_to_goal, slam_check)
+
+                if (turning and GTG and center_check and not turn_to_goal and not turn_circle) or \
+                        (turning and turtlebot_moving and center_check
+                         and not turn_to_goal and not turn_circle):
+                    turn_ref = 40
+                    angle_add = 10
+                    turn_spd = tnspeed * (50 - abs(index - 50)) / 20
+
+                    if index < 50:
+                        # turn_spd = tnspeed * abs(index-50) / 10
+                        if turn_spd < 1:
+                            turn_spd = 1
+
+                        if turn_flag > 9:
+                            step_goal = True
+                            obs_yaw = yaw_d + (index - 50) * 74 / 50
+                            turn_yaw = math.radians(obs_yaw + 50)
+                            goal_x = x_pose + 10 * math.cos(turn_yaw)
+                            goal_y = y_pose + 10 * math.sin(turn_yaw)
+                            turn_flag = 0
+                        index = max_i
+                        rospy.loginfo('Left Avoid angle is %d to %d ', 50 - turn_ref - angle_add, 50 - turn_ref)
+
+                        if (50 - turn_ref) > index > (50 - turn_ref - angle_add):
+                            target_linear_vel = speed
+                            turn_speed = 0.3
+                            turn_flag = turn_flag - 1
+                            rospy.loginfo('Enough left turn go!! %f speed : %f', index, turn_speed)
+
+                        else:
+                            target_linear_vel = -0.1
+                            if too_close > 5:
+                                target_linear_vel = -1
+                            turn_speed = turn_spd
+                            rospy.loginfo('Turn left avoid!! %f speed : %f', index, turn_speed)
+                            boundary = True
+                            turn_dir = 1
+                    else:
+
+                        if turn_spd < 1:
+                            turn_spd = 1
+                        if turn_flag > 9:
+                            step_goal = True
+                            obs_yaw = yaw_d + (index - 50) * 74 / 50
+                            turn_yaw = math.radians(obs_yaw - 50)
+                            goal_x = x_pose + 10 * math.cos(turn_yaw)
+                            goal_y = y_pose + 10 * math.sin(turn_yaw)
+                            turn_flag = 0
+                        index = obs_start
+                        rospy.loginfo('Right Avoid angle is %d to %d ', 50 + turn_ref, 50 + turn_ref + angle_add)
+
+                        if (50 + turn_ref + angle_add) > index > (50 + turn_ref):
+                            target_linear_vel = speed
+                            turn_speed = -0.3
+                            turn_flag = turn_flag - 1
+                            rospy.loginfo('Enough right turn go!! %f speed : %f', index, turn_speed)
+                        else:
+                            target_linear_vel = -0.1
+                            if too_close > 5:
+                                target_linear_vel = -1
+                            turn_speed = -turn_spd
+                            rospy.loginfo('Turn right avoid !! %f speed : %f', index, turn_speed)
+                            boundary = True
+                            turn_dir = 2
+                    rospy.loginfo('avoid!')
+                    twist.linear.x = target_linear_vel
+                    twist.angular.z = turn_speed
+                    # interval = rospy.get_time() - clock
+                    # clock = rospy.get_time()
+                    current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                    dt = (current_time - last_time).to_sec()
+                    if dt == 0:
+                        err_code = 13
+                        dt = 0.1
+                        rospy.loginfo('dt Zero Error!!! %d ', err_code)
+
+                    if abs(twist.angular.z) > 0.8:
+                        fr_float64.data = 0.78
+                        fl_float64.data = -0.78
+                        br_float64.data = -0.78
+                        bl_float64.data = 0.78
+                    else:
+                        fr_float64.data = 0.0
+                        fl_float64.data = 0.0
+                        br_float64.data = 0.0
+                        bl_float64.data = 0.0
+                        twist.angular.z = twist.angular.z * 1.5
+
+                    if abs(bl_float64.data - bl_joint) > 0.3 and backward_flag == 0:
+                        rospy.loginfo('============= BL joint trans yet %f vs %f =============',
+                                      bl_float64.data, bl_joint)
+
+                        brake_data = 500.0  # 0.0 to 100.0
+                        brake_service_name = '/scout_1/brake_rover'
+                        brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+                        brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+                        brake_result = brake_srv_client(brake_data)
+                        print(brake_result)
+                    else:
+                        brake_data = 0.0  # 0.0 to 100.0
+                        brake_service_name = '/scout_1/brake_rover'
+                        brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+                        brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+                        brake_result = brake_srv_client(brake_data)
+                        print(brake_result)
+                    if backward_flag == 0:
+                        pub.publish(twist)
+
+                    # angle = angle + turn_speed * interval
+                    angle = yaw_d
+                    x_pose, y_pose, z_pose, velEst = self.cal(x_pose, y_pose, z_pose, angle,
+                                                              dt * target_linear_vel, pitch, dt, twist)
+                    rospy.loginfo('Distance : %f , angle : %f ', min_distance, index * 1.48)
+                else:
+                    if GTG:
+                        target_x = goal_x - x_pose
+                        target_y = goal_y - y_pose
+                        angle = yaw_d
+                        target_angle = math.degrees(math.atan2(target_y, target_x))
+                        turn_angle = target_angle - angle
+
+                        if turn_angle > 180:
+                            turn_angle = turn_angle - 360
+                        elif turn_angle < -180:
+                            turn_angle = turn_angle + 360
+
+                        turn_spd = tnspeed * abs(turn_angle) / 10
+                        if turn_spd > tnspeed:
+                            turn_spd = tnspeed
+                        elif turn_spd < 0.3:
+                            turn_spd = 0.3
+
+                        if 0 < turn_angle:
+                            target_angular_vel = turn_spd
+                            rospy.loginfo('Turn left!! angle : %d , speed : %f', turn_angle, turn_spd)
+                            if turn_angle < 5:
+                                target_linear_vel = speed
+                                turn_to_goal = False
+                            else:
+                                target_linear_vel = 0
+                                turn_to_goal = True
+
+                        if turn_angle < 0:
+                            rospy.loginfo('Turn right!! angle : %d , speed : %f', turn_angle, -turn_spd)
+                            target_angular_vel = -turn_spd
+                            if turn_angle > -5:
+                                target_linear_vel = speed
+                                turn_to_goal = False
+                            else:
+                                target_linear_vel = 0
+                                turn_to_goal = True
+
+                        if math.sqrt(math.pow(target_x, 2) + math.pow(target_y, 2)) < 5:
+                            stuck_flag = 0
+                            target_linear_vel = 0
+                            target_angular_vel = 0
+                            rospy.loginfo('Reach Goal  %d, %d ', goal_x, goal_y)
+                            if step_goal:
+                                step_goal = False
+                                goal_x = goal_point[goal][0]
+                                goal_y = goal_point[goal][1]
+                                if score < 5:
+                                    goal_x = finding_object_goal_x
+                                    goal_y = finding_object_goal_y
+
+                            else:
+                                if score < 5:
+                                    GTG = False
+                                    find_object_time = 0.0
+                                    object_check_flag = 0
+                                    object_x_center = 10
+                                    turtlebot_moving = False
+                                    float64.data = 0.35
+                                    find_both_go = False
+
+                                if slam:
+                                    center_check = False
+
+                    twist.linear.x = target_linear_vel
+                    twist.angular.z = target_angular_vel
+                    # interval = rospy.get_time() - clock
+                    # clock = rospy.get_time()
+                    current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                    dt = (current_time - last_time).to_sec()
+                    if dt == 0:
+                        err_code = 14
+                        dt = 0.1
+                        rospy.loginfo('dt Zero Error!!! %d ', err_code)
+                    TTC = False
+
+                    if not find_object and score < 5 and object_x_center != 0 and not GTG:
+                        TTC = True
+                        twist.linear.x = 0.0
+                        twist.angular.z = 0.0
+                        if find_object_time == 0:
+                            find_object_time = current_time
+                        if find_both:
+                            time_offset = find_time - 5
+                            current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                            rospy.loginfo('============= Found both, Set current_time : %d =============',
+                                          current_time.to_sec())
+
+                        rospy.loginfo('=============Try find Object time : %d =============',
+                                      (current_time - find_object_time).to_sec())
+                        if base_center != 0:
+                            base_flag += 1
+                        else:
+                            base_flag = 0
+                        if base_flag > 2:
+                            if base_center < 320:
+                                twist.angular.z = -tnspeed
+                                rospy.loginfo('Avoid Base(%d) : right %f', base_center, twist.angular.z)
+                                object_x_center = 630
+                                base_center = 0
+                            elif base_center > 320:
+                                twist.angular.z = tnspeed
+                                rospy.loginfo('Avoid Base(%d) : left %f', base_center, twist.angular.z)
+                                object_x_center = 10
+                                base_center = 0
+                        elif object_x_center < 60:
+                            twist.angular.z = tnspeed * (320 - object_x_center) / 40
+                            if twist.angular.z > tnspeed:
+                                twist.angular.z = tnspeed
+                            elif twist.angular.z < 0.1:
+                                twist.angular.z = 0.1
+                            if distance < 25:  # too closer
+                                twist.linear.x = -1.5
+                            rospy.loginfo('Find Object(%d) : left %f', object_x_center, twist.angular.z)
+                        elif object_x_center > 580:
+                            twist.angular.z = tnspeed * -(object_x_center - 320) / 40
+                            if twist.angular.z < -tnspeed:
+                                twist.angular.z = -tnspeed
+                            elif twist.angular.z > -0.1:
+                                twist.angular.z = -0.1
+                            if distance < 25:  # too closer
+                                twist.linear.x = -1.5
+                            rospy.loginfo('Find Object(%d) : right %f', object_x_center, twist.angular.z)
+                        else:
+                            rospy.loginfo('Found Object %d : %f , time : %f', object_check_flag, object_x_center,
+                                          (current_time - first_found_object).to_sec())
+                            if object_y_center > 400:
+                                backward_flag = 2
+                                find_object_time = 0
+
+                            if 1 < object_distance < 50 or get_pose_result > 0:
+                                if not find_both:
+                                    object_check_flag += 1
+                                twist.linear.x = 0.0
+                                if first_found_object_flag == 0 and object_check_flag > 2:
+                                    get_pose_result = 1
+                                    try:
+                                        get_pose_result = 2
+                                        srv_enable_robot_position_callback('/scout_1', True)
+                                    except rospy.ServiceException as e:
+                                        get_pose_result = 3
+                                        print("Call True pose failed: %s" % e)
+                                        pass
+                                    # odom_gen(scout_1_pos)
+                                    first_found_object_flag = 1
+                                    first_found_object = current_time
+                                else:
+                                    rospy.loginfo('First_found_object_flag %d, Object_check_flag %d,'
+                                                  ' First_found_object_time %d',
+                                                  first_found_object_flag, object_check_flag,
+                                                  (current_time - first_found_object).to_sec())
+
+                                if object_check_flag > 10 and (current_time - first_found_object).to_sec() > 20:
+                                    object_check_flag = 0
+                                    find_object_time = 0
+                                    rospy.loginfo('Call Object Serrvice')
+                                    pose = Point(object_x, object_y, object_z)
+                                    service_name = '/apriori_location_service'
+                                    srv_class = rosservice.get_service_class_by_name(service_name)
+                                    srv_client = rospy.ServiceProxy(service_name, srv_class)
+                                    if recall_time == 0:
+                                        recall_time = current_time
+                                        try:
+                                            stuck_flag = 0
+                                            srv_result = srv_client(pose)
+                                            print(srv_result)
+                                            find_object = True
+                                            call_step = 1
+                                            center_check = False
+                                            center = 600
+                                            slam = True
+                                            goal = 1
+                                            goal_x = goal_point[goal][0]
+                                            goal_y = goal_point[goal][1]
+                                            turtlebot_moving = False
+                                            GTG = True
+                                            rospy.loginfo('Slam!!!')
+                                        except rospy.ServiceException as e:
+                                            print("Call Object failed: %s" % e)
+                                    else:
+                                        if (current_time - recall_time).to_sec() > 200:
+                                            recall_time = current_time
+                                            try:
+                                                stuck_flag = 0
+                                                srv_result = srv_client(pose)
+                                                print(srv_result)
+                                                find_object = True
+                                                call_step = 1
+                                                center_check = False
+                                                center = 600
+                                                slam = True
+                                                goal = 1
+                                                goal_x = goal_point[goal][0]
+                                                goal_y = goal_point[goal][1]
+                                                turtlebot_moving = False
+                                                GTG = True
+                                                rospy.loginfo('Slam!!!')
+                                            except rospy.ServiceException as e:
+                                                print("Call Object failed: %s" % e)
+                                        else:
+                                            rospy.loginfo('Recall time is %d', (current_time - recall_time).to_sec())
+
+
+
+
+                            else:
+                                rospy.loginfo('============ Too far from Object %f ============', object_distance)
+                                fr_float64.data = 0.0
+                                fl_float64.data = 0.0
+                                br_float64.data = 0.0
+                                bl_float64.data = 0.0
+                                twist.linear.x = speed
+
+                    if not center_check and center < 640:
+                        TTC = True
+                        # float64.data = 0.2
+                        rospy.loginfo('Find center : %f, time : %f', center, (current_time - center_chk_time).to_sec())
+                        move_wait_time = current_time
+                        if pre_center != center and distance < 60:
+                            center_chk_time = current_time
+                        pre_center = center
+                        twist.linear.x = 0.0
+                        # fr_float64.data = 0.78
+                        # fl_float64.data = -0.78
+                        # br_float64.data = -0.78
+                        # bl_float64.data = 0.78
+
+                        if 1 < distance < 9:
+                            twist.linear.x = -2
+                        elif 9 < distance < 15:
+                            twist.linear.x = 1.5 # too far
+                        else:
+                            twist.linear.x = 0.0
+
+                        if center < 314:
+                            twist.angular.z = tnspeed * (320 - center) / 40
+                            if twist.angular.z > tnspeed:
+                                twist.angular.z = tnspeed
+                            elif twist.angular.z < 0.1:
+                                twist.angular.z = 0.1
+                            if distance < 20:  # too closer
+                                twist.linear.x = -1.5
+                            rospy.loginfo('Find center : left %f', twist.angular.z)
+                        elif center > 327:
+                            twist.angular.z = tnspeed * -(center - 320) / 40
+                            if twist.angular.z < -tnspeed:
+                                twist.angular.z = -tnspeed
+                            elif twist.angular.z > -0.1:
+                                twist.angular.z = -0.1
+                            if distance < 20:  # too closer
+                                twist.linear.x = -1.5
+                            rospy.loginfo('Find center : right %f', twist.angular.z)
+                        else:
+                            rospy.loginfo('Found center %d : %f ', center_check_flag, center)
+                            center_check_flag = center_check_flag + 1
+
+                            if start_flag < 2:
+                                if center_check_flag > 5 and distance < 60:
+                                    base_x = x_pose - cal_x
+                                    base_y = y_pose - cal_y
+                                    goal_point[0] = [base_x, base_y]
+                                    for i in range(0, 11):
+                                        ref_yaw = yaw + math.radians(180 - i * 30)
+                                        goal_point[i + 1] = [base_x + 9 * math.cos(ref_yaw),
+                                                             base_y + 9 * math.sin(ref_yaw)]
+                                    goal_x = goal_point[goal][0]
+                                    goal_y = goal_point[goal][1]
+                                    start_flag = 2
+                                    if marker_x_range > 1:
+                                        turn_circle = True
+                                        target_angular_vel = 0
+                                        twist.angular.z = 0
+                                        target_linear_vel = speed
+                                        slam = False
+                                        GTG = False
+
+                                    center_check = True
+                                    TTC = False
+                                    center_check_flag = 0
+                                    center = 640
+                                    twist.angular.z = 0
+                            else:
+                                distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+                                if abs(distance_from_base - distance) > 2.5 and not reset_odom and distance < 20:
+                                    center_check = False
+                                    center = 600
+                                    slam = True
+                                    reset_odom = True
+                                    center_check_flag = 0
+
+                                if reset_odom:
+                                    if center_check_flag > 5:
+                                        x_pose = base_x + cal_x
+                                        y_pose = base_y + cal_y
+                                        reset_odom_service_name = '/scout_1/reset_odom_to_pose'
+                                        reset_odom_srv_class = rosservice.get_service_class_by_name(
+                                            reset_odom_service_name)
+                                        reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name,
+                                                                                   reset_odom_srv_class)
+                                        reset_odom_srv_client(x_pose, y_pose, odom_z, odom_roll, imu_pitch,
+                                                              imu_yaw)
+
+                                        center_check = True
+                                        TTC = False
+                                        center_check_flag = 0
+                                        center = 640
+                                        twist.angular.z = 0
+                                        reset_odom = False
+
+                                else:
+                                    if center_check_flag > 0:
+                                        if distance < 60:
+                                            x_pose = base_x + cal_x
+                                            y_pose = base_y + cal_y
+                                            if marker_x_range > 1:
+                                                turn_circle = True
+                                                target_angular_vel = 0
+                                                twist.angular.z = 0
+                                                target_linear_vel = speed
+                                                slam = False
+                                                GTG = False
+                                            if slam:
+                                                if distance < 30 and 100 < center < 600:
+                                                    goal = goal + 1
+                                                    if goal > 11:
+                                                        goal = 1
+                                                        reset_odom = True
+                                                    goal_x = goal_point[goal][0]
+                                                    goal_y = goal_point[goal][1]
+                                                    stuck_flag = 0
+                                                    print("Go to next point")
+                                        center_check = True
+                                        TTC = False
+                                        center_check_flag = 0
+                                        center = 640
+                                        twist.angular.z = 0
+
+                        if (current_time - center_chk_time).to_sec() > 60.0 and start_flag != 1:
+                            center_check = True
+                            TTC = False
+
+                    distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+                    if distance_from_base > 20 and turn_circle:
+                        marker_x_center = 0
+                        center = 10
+                        center_check = False
+                        center_check_flag = 0
+
+                    if (abs(twist.angular.z) > 0.4 or TTC or score == 13) \
+                            and not turn_circle:  # not sure
+                        fr_float64.data = 0.78
+                        fl_float64.data = -0.78
+                        br_float64.data = -0.78
+                        bl_float64.data = 0.78
+                        rospy.loginfo('Turn mode !!! %f ', twist.angular.z)
+                    elif turn_circle:
+                        twist.angular.z = 0
+                        width = 1.5748
+                        length = 1.87325
+                        base_range = distance - 1.5
+                        fr_float64.data = -(math.radians(90) - math.atan2(length, base_range - (width / 2)))
+                        fl_float64.data = -math.radians(90)
+                        br_float64.data = -(math.radians(90) - math.atan2(length, base_range + (width / 2)))
+                        bl_float64.data = -math.radians(90)
+
+                        if abs(base_center - marker_x_center) < 15:
+                            rospy.loginfo('=============Center ALIGNED  c: %d, d : %f =============',
+                                          (base_center - marker_x_center), max_distance)
+                            if abs(distance_from_base - distance) > 5:
+                                center_check = False
+                                center = 600
+                                slam = True
+                                reset_odom = True
+                                center_check_flag = 0
+
+                            if distance_from_base > max_distance or distance > max_distance:
+                                twist.linear.x = speed
+                                fr_float64.data = 0.0
+                                fl_float64.data = 0.0
+                                br_float64.data = 0.0
+                                bl_float64.data = 0.0
+                            elif distance_from_base < 6 or distance < 6:
+                                twist.linear.x = -speed
+                                fr_float64.data = 0.0
+                                fl_float64.data = 0.0
+                                br_float64.data = 0.0
+                                bl_float64.data = 0.0
+                            else:
+                                twist.linear.x = 0
+
+                            if 300 < marker_x_center < 340 and score != 13 and call_step != 3:
+                                if (current_time-before_call_time).to_sec() > 0.5:
+                                    if (distance < max_distance and distance_from_base < max_distance) and score == 5:
+                                        rospy.loginfo('============= Call Arrived_home_service Service %d =============',
+                                                      marker_x_center)
+                                        align_data = True
+                                        align_service_name = '/arrived_home_service'
+                                        align_srv_class = rosservice.get_service_class_by_name(align_service_name)
+                                        align_srv_client = rospy.ServiceProxy(align_service_name, align_srv_class)
+                                        try:
+                                            before_call_time = current_time
+                                            align_result = align_srv_client(align_data)
+                                            rospy.loginfo(align_result)
+                                            call_step += 1
+                                        except Exception as e:
+                                            rospy.loginfo("=========ALIGN SERVICE ERROR %s =========", e)
+                                            if distance > (max_distance - 0.5) or \
+                                                    distance_from_base > (max_distance - 0.5):
+                                                max_distance -= 0.1
+                                                if max_distance < 7:
+                                                    max_distance = 7
+
+                                            if distance_from_base > max_distance or distance > max_distance:
+                                                twist.linear.x = speed
+                                                fr_float64.data = 0.0
+                                                fl_float64.data = 0.0
+                                                br_float64.data = 0.0
+                                                bl_float64.data = 0.0
+                                            else:
+                                                if distance_from_base < 5 or distance < 5:
+                                                    twist.linear.x = -speed
+                                                    fr_float64.data = 0.0
+                                                    fl_float64.data = 0.0
+                                                    br_float64.data = 0.0
+                                                    bl_float64.data = 0.0
+                                                else:
+                                                    fr_float64.data = -(
+                                                                math.radians(90) - math.atan2(length, base_range - (
+                                                                width / 2)))
+                                                    fl_float64.data = -math.radians(90)
+                                                    br_float64.data = -(
+                                                                math.radians(90) - math.atan2(length, base_range + (
+                                                                width / 2)))
+                                                    bl_float64.data = -math.radians(90)
+                                                    if 320 < marker_x_center:
+                                                        twist.linear.x = 1
+                                                        rospy.loginfo('=============Turn cirle right1  % d=============',
+                                                                      marker_x_center)
+                                                        rospy.loginfo('=============Turn cirle right1  % d=============',
+                                                                      marker_x_center)
+                                                    else:
+                                                        twist.linear.x = -1
+                                                        rospy.loginfo('=============Turn cirle left1  % d=============',
+                                                                      marker_x_center)
+                                                        rospy.loginfo('=============Turn cirle left1  % d=============',
+                                                                      marker_x_center)
+
+                                            pass
+                                    else:
+                                        if distance < max_distance and distance_from_base < max_distance:
+                                            rospy.loginfo('============= Too far from home %d(%d). '
+                                                          'score : %d =============',
+                                                          distance, distance_from_base, score)
+                                        else:
+                                            rospy.loginfo("=========Already score %d =========", score)
+                                    if call_step == 2 or score == 10 and \
+                                            distance < max_distance and distance_from_base < max_distance:
+                                        rospy.loginfo('=============CALL Aligned_service service %d =============',
+                                                      marker_x_center)
+                                        align_data = True
+                                        align_service_name = '/aligned_service'
+                                        align_srv_class = rosservice.get_service_class_by_name(align_service_name)
+                                        align_srv_client = rospy.ServiceProxy(align_service_name, align_srv_class)
+                                        try:
+                                            before_call_time = current_time
+                                            align_result = align_srv_client(align_data)
+                                            rospy.loginfo(align_result)
+                                            call_step += 1
+                                            twist.linear.x = 0
+                                            twist.angular.z = 0
+                                            if backward_flag == 0:
+                                                pub.publish(twist)
+                                            # brake_data = 500.0  # 0.0 to 100.0
+                                            # brake_service_name = '/scout_1/brake_rover'
+                                            # brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+                                            # brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+                                            # brake_result = brake_srv_client(brake_data)
+                                            # print(brake_result)
+                                        except Exception as e:
+                                            rospy.loginfo("=========ALIGN SERVICE ERROR %s =========", e)
+                                            if distance > (max_distance - 0.5) or \
+                                                    distance_from_base > (max_distance - 0.5):
+                                                max_distance -= 0.1
+                                                if max_distance < 7:
+                                                    max_distance = 7
+
+                                            if distance_from_base > max_distance or distance > max_distance:
+                                                twist.linear.x = speed
+                                                fr_float64.data = 0.0
+                                                fl_float64.data = 0.0
+                                                br_float64.data = 0.0
+                                                bl_float64.data = 0.0
+                                            else:
+                                                fr_float64.data = -(math.radians(90) - math.atan2(length, base_range - (
+                                                        width / 2)))
+                                                fl_float64.data = -math.radians(90)
+                                                br_float64.data = -(math.radians(90) - math.atan2(length, base_range + (
+                                                        width / 2)))
+                                                bl_float64.data = -math.radians(90)
+                                                if 320 < marker_x_center:
+                                                    twist.linear.x = 1
+                                                    rospy.loginfo('=============Turn cirle right2  % d=============',
+                                                                  marker_x_center)
+                                                    rospy.loginfo('=============Turn cirle right2  % d=============',
+                                                                  marker_x_center)
+                                                else:
+                                                    twist.linear.x = -1
+                                                    rospy.loginfo('=============Turn cirle left2  % d=============',
+                                                                  marker_x_center)
+                                                    rospy.loginfo('=============Turn cirle left2  % d=============',
+                                                                  marker_x_center)
+
+                                            if distance_from_base < 6 or distance < 6:
+                                                twist.linear.x = -speed
+                                                fr_float64.data = 0.0
+                                                fl_float64.data = 0.0
+                                                br_float64.data = 0.0
+                                                bl_float64.data = 0.0
+                                            pass
+                                    else:
+                                        if distance_from_base > max_distance or distance > max_distance:
+                                            twist.linear.x = speed
+                                            fr_float64.data = 0.0
+                                            fl_float64.data = 0.0
+                                            br_float64.data = 0.0
+                                            bl_float64.data = 0.0
+                                else:
+                                    rospy.loginfo('============= Not enough interval % f=============',
+                                            (current_time-before_call_time).to_sec())
+                                    fr_float64.data = -(math.radians(90) - math.atan2(length,
+                                                                                      base_range - (width / 2)))
+                                    fl_float64.data = -math.radians(90)
+                                    br_float64.data = -(math.radians(90) - math.atan2(length,
+                                                                                      base_range + (width / 2)))
+                                    bl_float64.data = -math.radians(90)
+                                    if 320 < marker_x_center:
+                                        twist.linear.x = 1
+                                        rospy.loginfo('=============Turn cirle right3  % d=============',
+                                                      marker_x_center)
+                                        rospy.loginfo('=============Turn cirle right3  % d=============',
+                                                      marker_x_center)
+                                    else:
+                                        twist.linear.x = -1
+                                        rospy.loginfo('=============Turn cirle left3  % d=============',
+                                                      marker_x_center)
+                                        rospy.loginfo('=============Turn cirle left3  % d=============',
+                                                      marker_x_center)
+
+                            else:
+                                if 260 < marker_x_center < 340:
+                                    fr_float64.data = -(math.radians(90) - math.atan2(length, base_range - (width / 2)))
+                                    fl_float64.data = -math.radians(90)
+                                    br_float64.data = -(math.radians(90) - math.atan2(length, base_range + (width / 2)))
+                                    bl_float64.data = -math.radians(90)
+                                    if 320 < marker_x_center:
+                                        twist.linear.x = 1
+                                        rospy.loginfo('=============Turn cirle right4  % d=============',
+                                                      marker_x_center)
+                                        rospy.loginfo('=============Turn cirle right4  % d=============',
+                                                      marker_x_center)
+                                    else:
+                                        twist.linear.x = -1
+                                        rospy.loginfo('=============Turn cirle left4  % d=============',
+                                                      marker_x_center)
+                                        rospy.loginfo('=============Turn cirle left4  % d=============',
+                                                      marker_x_center)
+                                else:
+                                    fr_float64.data = 0.78
+                                    fl_float64.data = -0.78
+                                    br_float64.data = -0.78
+                                    bl_float64.data = 0.78
+                                    twist.linear.x = 0
+                                    if 320 < marker_x_center:
+                                        twist.angular.z = -1
+                                        rospy.loginfo('=============Turn left5  % d=============',
+                                                      marker_x_center)
+                                        rospy.loginfo('=============Turn left5  % d=============',
+                                                      marker_x_center)
+                                    else:
+                                        twist.angular.z = 1
+                                        rospy.loginfo('=============Turn right5  % d=============',
+                                                      marker_x_center)
+                                        rospy.loginfo('=============Turn right5  % d=============',
+                                                      marker_x_center)
+
+                        else:
+                            rospy.loginfo('=============Center Not ALIGNED c: %d ============= ',
+                                          (base_center - marker_x_center))
+
+                            if (base_center - marker_x_center) < 0:
+                                twist.linear.x = target_linear_vel
+                                rospy.loginfo('=============Turn cirle right % d=============',
+                                              (base_center - marker_x_center))
+                            else:
+                                twist.linear.x = -target_linear_vel
+                                rospy.loginfo('=============Turn cirle left % d=============',
+                                              (base_center - marker_x_center))
+
+                        if distance > max_distance and 140 < marker_x_center < 500:
+                            rospy.loginfo('=============Too far from base backward=============')
+                            twist.linear.x = speed
+                            fr_float64.data = 0.0
+                            fl_float64.data = 0.0
+                            br_float64.data = 0.0
+                            bl_float64.data = 0.0
+                        elif distance < 6 or distance_from_base < 6:
+                            rospy.loginfo('=============Too close from base backward=============')
+                            twist.linear.x = -speed
+                            fr_float64.data = 0.0
+                            fl_float64.data = 0.0
+                            br_float64.data = 0.0
+                            bl_float64.data = 0.0
+                        if marker_x_center != 0 and base_center == 0:
+                            rospy.loginfo('=============Cant see base backward=============')
+                            twist.linear.x = -speed
+                            fr_float64.data = 0.0
+                            fl_float64.data = 0.0
+                            br_float64.data = 0.0
+                            bl_float64.data = 0.0
+                        marker_x_center = 0
+                        base_center = 0
+
+                    else:
+                        fr_float64.data = 0.0
+                        fl_float64.data = 0.0
+                        br_float64.data = 0.0
+                        bl_float64.data = 0.0
+                        rospy.loginfo('Go mode !!!  %f ', twist.angular.z)
+                        twist.angular.z = twist.angular.z * 5
+                    if find_object_time != 0.0:
+                        if find_time < (current_time - find_object_time).to_sec() < go_time and not find_object:
+                            fr_float64.data = 0.0
+                            fl_float64.data = 0.0
+                            br_float64.data = 0.0
+                            bl_float64.data = 0.0
+                            twist.linear.x = speed
+                            turtlebot_moving = True
+                            float64.data = 0.15
+                            distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+                            if distance_from_base > 25:
+                                find_object_time = 0.0
+                                object_check_flag = 0
+                                goal_x = -x_pose
+                                goal_y = -y_pose
+                                finding_object_goal_x = goal_x
+                                finding_object_goal_y = goal_y
+                                GTG = True
+
+                        elif (current_time - find_object_time).to_sec() > go_time:
+                            forward_time = 20
+                            find_object_time = 0.0
+                            object_check_flag = 0
+                            turtlebot_moving = False
+                            float64.data = 0.35
+                            find_both_go = False
+                            object_x_center = 10
+
+                    if marker_x_center != 0 and base_center == 0:
+                        rospy.loginfo('=============Cant see base backward=============')
+                        twist.linear.x = -speed
+                        fr_float64.data = 0.0
+                        fl_float64.data = 0.0
+                        br_float64.data = 0.0
+                        bl_float64.data = 0.0
+
+                    if start_flag != 1 and distance < 6:
+                        rospy.loginfo('Too close from base 123 !!!  %f ', distance)
+                        twist.linear.x = -2
+                        fr_float64.data = 0.0
+                        fl_float64.data = 0.0
+                        br_float64.data = 0.0
+                        bl_float64.data = 0.0
+
+                    if abs(bl_float64.data - bl_joint) > 0.3 and backward_flag == 0:
+                        rospy.loginfo('============= BL joint trans yet %f vs %f =============',
+                                      bl_float64.data, bl_joint)
+
+                        brake_data = 500.0  # 0.0 to 100.0
+                        brake_service_name = '/scout_1/brake_rover'
+                        brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+                        brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+                        brake_result = brake_srv_client(brake_data)
+                        print(brake_result)
+                    else:
+                        brake_data = 0.0  # 0.0 to 100.0
+                        brake_service_name = '/scout_1/brake_rover'
+                        brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+                        brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+                        brake_result = brake_srv_client(brake_data)
+                        print(brake_result)
+                    if backward_flag == 0:
+                        pub.publish(twist)
+                    angle = yaw_d
+                    x_pose, y_pose, z_pose, velEst = self.cal(x_pose, y_pose, z_pose, angle,
+                                                              dt * target_linear_vel, pitch, dt, twist)
+
+                distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+                if abs(distance_from_base - distance) > 5 and not reset_odom \
+                        and 310 < center < 330 and score > 0:
+                    center_check = False
+                    center = 600
+                    slam = True
+                    reset_odom = True
+                    center_check_flag = 0
+
+                pre_turn = turning
+                pre_turn_dir = turn_dir
+                # rospy.loginfo('============ check else ============ ')
+                imu_def = abs(math.degrees(yaw) - math.degrees(imu_yaw))
+                if (current_time - move_wait_time).to_sec() > 5:
+                    if not (math.sqrt(math.pow(x_pose - wait_x_pose, 2) + math.pow(y_pose - wait_y_pose, 2)) > 2
+                            or imu_def > 3):
+                        # btb = True
+                        # turn_flag = turn_flag + 10
+                        rospy.loginfo('Stuck !!! cant Go, %d', stuck_flag)
+                        rospy.loginfo('Stuck !!! cant Go, %d', stuck_flag)
+                        rospy.loginfo('Stuck !!! cant Go, %d', stuck_flag)
+                        rospy.loginfo('Stuck !!! cant Go, %d', stuck_flag)
+                        rospy.loginfo('Stuck !!! cant Go, %d', stuck_flag)
+                        stuck_flag += 1
+                        if slam and stuck_flag > 6:
+                            goal = goal + 1
+                            if goal > 11:
+                                goal = 1
+                            goal_x = goal_point[goal][0]
+                            goal_y = goal_point[goal][1]
+                            stuck_flag = 0
+                            center_check = False
+                            center = 600
+                            slam = True
+                            reset_odom = True
+                            center_check_flag = 0
+                            backward_flag = 30
+                            stuck_flag = 0
+                        elif stuck_flag > 20:
+                            backward_flag = 30
+                            stuck_flag = 0
+                        twist.linear.x = -1.5
+                        twist.angular.z = 0
+                        pub.publish(twist)
+                    else:
+                        stuck_flag -= 1
+                        if stuck_flag < 0:
+                            stuck_flag = 0
+                    move_wait_time = current_time
+                    wait_x_pose = x_pose
+                    wait_y_pose = y_pose
+
+                if stuck_flag > 0:
+                    rospy.loginfo('Stuck !!! stuck_flag!! %d', stuck_flag)
+
+                if backward_flag > 0:
+                    object_y_center = 0
+                    object_x_center = 0
+                    marker_x_center = 0
+                    base_center = 0
+                    rospy.loginfo('Stuck !!! backward Go!! %d, speed : %d', backward_flag, speed)
+                    twist.linear.x = -3
+                    twist.angular.z = 0.3
+                    fr_float64.data = 0.0
+                    fl_float64.data = 0.0
+                    br_float64.data = 0.0
+                    bl_float64.data = 0.0
+                    pub.publish(twist)
+                    stuck_flag = 0
+                    backward_flag -= 1
+                    if backward_flag < 0:
+                        backward_flag = 0
+
+                if odom_x != 0.0 and odom_y != 0.0 and odom_yaw != 0.0:
+                    x_pose = odom_x
+                    y_pose = odom_y
+                    z_pose = odom_z
+
+                if (yaw == pre_yaw) and pre_x_pose != 0 and imu_yaw != 0:
+                    reset_odom_service_name = '/scout_1/reset_odom_to_pose'
+                    reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+                    reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+                    reset_odom_srv_client(pre_x_pose, pre_y_pose, z_pose, roll, imu_pitch, imu_yaw)
+                    rospy.loginfo('Reset Odom!! x : %f, y : %f, z : %f, yaw : %f, pitch : %f ',
+                                  pre_x_pose, pre_y_pose, z_pose, imu_yaw, imu_pitch)
+
+                far_from_base = [x_pose - base_x, y_pose - base_y]
+
+                if not find_object and 0 < object_y_center < 480:
+                    if object_y_center < 240:
+                        float64.data += 0.01
+                    else:
+                        float64.data -= 0.01
+
+                if not find_object:
+                    if find_object_time != 0:
+                        if (current_time - find_object_time).to_sec() < find_time:
+                            if float64.data < 0.15:
+                                float64.data += 0.01
+                            if float64.data > 0.4:
+                                float64.data -= 0.01
+                    if float64.data < 0.15:
+                        float64.data += 0.01
+                    if float64.data > 0.4:
+                        float64.data -= 0.01
+                else:
+                    distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+                    if float64.data < 0.15:
+                        float64.data += 0.01
+                    if float64.data > 0.2:
+                        float64.data -= 0.01
+                    if distance_from_base > 20:
+                        float64.data = 0
+
+
+                rospy.loginfo('============= BL joint state %f vs %f =============',
+                              bl_float64.data, bl_joint)
+                if reset_odom:
+                    rospy.loginfo('============= Need Reset Odom =============')
+
+                light_data_f = 1.0
+                light_srv_client("%s" % light_data_f)
+                rospy.loginfo('Camera angle is : %f, light is : %f ', float64.data, light_data_f)
+
+                if twist.linear.x != 0:
+                    now_vel = math.sqrt((pre_x_pose - x_pose) ** 2 + (pre_y_pose - y_pose) ** 2) / dt
+                    if now_vel < 0.7:
+                        speed = speed + 0.1
+                        if abs(math.degrees(imu_pitch)) > 5:
+                            if speed > 5.0:
+                                speed = 5.0
+                        else:
+                            if speed > 3.5:
+                                speed = 3.5
+                        rospy.loginfo('Speed up : %f , Now : %f, Brake : %f ', speed, now_vel, brake_data)
+                    else:
+                        speed = speed - 0.2
+                        if speed < 1.0:
+                            speed = 1.0
+                        rospy.loginfo('Speed down : %f , Now : %f, Brake : %f  ', speed, now_vel, brake_data)
+
+                # rospy.loginfo('R_xc : %d, R_yc : %d, R_xr : %d, R_yr: %d, Vol_c  : %d, Vol_r : %d ',
+                #               rock_center, rock_y_center, rock_rng, rock_y_rng, vol_center, vol_rng)
+                # rospy.loginfo('Clock : %f , interval time : %f', clock, interval)
+                rospy.loginfo('Goal%d is %d, %d, target yaw is %f, step:%s',
+                              goal, goal_x, goal_y, target_angle, step_goal)
+                # rospy.loginfo('start (x, y, yaw, pitch) = ( %f , %f , %f, %f ) ', start_x, start_y, start_yaw,
+                #               math.degrees(start_pitch))
+                # rospy.loginfo("angle point is [%f , %f]", x_point, y_point)
+                rospy.loginfo('X : %f , Y : %f , Z : %f , yaw : %d (%d), pit : %f', x_pose, y_pose, z_pose, angle,
+                              math.degrees(imu_yaw), imu_pitch)
+                if start_flag == 1:
+                    rospy.loginfo('Set base X : %f , Y : %f center : %d & d : %f, w : %f',
+                                  x_pose - cal_x, y_pose - cal_y, center, distance, width_kf)
+                else:
+                    distance_from_base = math.sqrt(pow(far_from_base[0], 2) + pow(far_from_base[1], 2))
+
+                    rospy.loginfo('Base is X : %f , Y : %f ', base_x, base_y)
+                    rospy.loginfo('From base X : %f , Y : %f center : %d & d : %f(%f), w : %f',
+                                  base_x + cal_x, base_y + cal_y, center, distance, distance_from_base, width_kf)
+
+                if slam:
+                    rospy.loginfo('Go to next point !!! %d ', goal)
+
+                if marker_x_range > 0:
+                    rospy.loginfo('Marker Found!!! center :  %d, size(axis x) : %f',
+                                  marker_x_center, marker_x_range)
+
+                if call_step < 1:
+                    rospy.loginfo('Object Found!!! size :  %d, distance : %f , x : %d, y : %d',
+                                  object_size, object_distance, object_x_center, object_y_center)
+                    if object_size > 2:
+                        # distance_from_object = math.sqrt(pow(true_object_x - odom_x, 2) +
+                        #                                  pow(true_object_y - odom_y, 2) + pow(true_object_z - odom_z, 2))
+                        # rospy.loginfo('Object Found!!! Real distance :  %f, ratio : %f  ',
+                        #               distance_from_object, distance_from_object / object_distance)
+                        rospy.loginfo('Object Pos (%f, %f, %f,)  ', object_x, object_y, object_z)
+
+                    # rospy.loginfo('Base Found!!! size :  %d, distance : %f ', base_size, base_distance)
+                    # if base_size > 100:
+                    #     rospy.loginfo('Base Pos (%f, %f, %f,)  ', base_x, base_y, base_z)
+                else:
+                    rospy.loginfo('Already Object Found %d !!!', call_step)
+                rospy.loginfo('========== Now Score %d, Calls %d !!! ==========', score, calls)
+
+                if get_pose_result > 0:
+                    rospy.loginfo('========== Get_pose_result %d !!! ==========', get_pose_result)
+                if find_both:
+                    rospy.loginfo('========== Found Base and Object both !!! ==========')
+
+                if score == 13:
+                    rospy.loginfo('========== Mission Complete %d !!! ==========', score)
+                    rospy.loginfo('========== Mission Complete %d !!! ==========', score)
+                    rospy.loginfo('========== Mission Complete %d !!! ==========', score)
+                    rospy.loginfo('========== Mission Complete %d !!! ==========', score)
+                    rospy.loginfo('========== Mission Complete %d !!! ==========', score)
+
+                    # light_data_f = 1.0
+                    float64.data = - 0.5
+                    fr_float64.data = 0.78
+                    fl_float64.data = -0.78
+                    br_float64.data = -0.78
+                    bl_float64.data = 0.78
+                    twist.linear.x = 0
+                    twist.angular.z = 3
+                    pub.publish(twist)
+
+                    brake_data = 0.0  # 0.0 to 100.0
+                    brake_service_name = '/scout_1/brake_rover'
+                    brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+                    brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+                    brake_result = brake_srv_client(brake_data)
+                    print(brake_result)
+
+                last_time = current_time
+                scan_result.ranges = obs_r
+                scan_pub.publish(scan_result)
+
+                FR_pub.publish(fr_float64)
+                FL_pub.publish(fl_float64)
+                BR_pub.publish(br_float64)
+                BL_pub.publish(bl_float64)
+                pre_fl_float64 = fl_float64.data
+                pre_x_pose = x_pose
+                pre_y_pose = y_pose
+                pre_yaw = yaw
+                # rospy.loginfo('rospy.is_shutdown()? 2 %s', rospy.is_shutdown())
+
+            except Exception as e:
+                err_code = 10
+                print("Obstacle except Error", e)
+                pass
+        rospy.loginfo('Ros is shutdown!!!! %s', rospy.is_shutdown())
+
+
+def shut_down():
+    print("Ros is shutdown!! code : %d " % err_code)
+
+
+def main():
+    if os.name != 'nt':
+        settings = termios.tcgetattr(sys.stdin)
+    rospy.init_node('turtlebot3_teleop')
+    rospy.on_shutdown(shut_down)
+    sleep_second = 10
+    for i in range(0, sleep_second):
+        rospy.loginfo('wait for %d second now : %d s', sleep_second, i)
+        time.sleep(1)
+    global angle_point, before_score_time, vol_type_array
+    before_score_time = rospy.Time.now()
+
+    for i in range(0, 360):
+        line = [math.cos(math.radians(i)), math.sin(math.radians(i))]
+        angle_point[i] = line
+
+    # for i in range(0, 27):
+    #     vol_type_array = np.append(vol_type_array, np.array(["ice"]))
+
+    rospy.loginfo(vol_type_array)
+
+    # Define your image topic
+    image_topic = "/scout_1/camera/left/image_raw"
+    # Set up your subscriber and define its callback
+    rospy.Subscriber(image_topic, Image, image_callback)
+    rospy.Subscriber('/darknet_ros/bounding_boxes', BoundingBoxes, box)
+    rospy.Subscriber('scout_1/odom', Odometry, odom_callback)
+    rospy.Subscriber('scout_1/imu', Imu, imu_callback)
+    rospy.Subscriber("scout_1/camera/points2", PointCloud2, on_new_point_cloud)
+    rospy.Subscriber("qual_3_score", Qual3ScoringMsg, get_score)
+    rospy.Subscriber("scout_1/joint_states", JointState, get_joint)
+
+    # rospy.Subscriber("scout_1/octomap_occupied_space", PointCloud2, on_new_point_cloud)
+
+    light_srv_client("%s" % light_data)
+
+    rospy.loginfo('Ros is start!!!! %s', rospy.is_shutdown())
+
+    brake_data = 0.0  # 0.0 to 100.0
+    brake_service_name = '/scout_1/brake_rover'
+    brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+    brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+    brake_result = brake_srv_client(brake_data)
+    print(brake_result)
+
+    # rospy.init_node('turtlebot3_obstacle')
+    try:
+        rospy.loginfo('Check the obstacle ')
+        Obstacle()
+        # while 1:
+        #     x = 1
+
+    except rospy.ROSInterruptException:
+        pass
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,11 @@
+controller_list:
+  - name: fake_small_excavator_arm_controller
+    type: $(arg execution_type)
+    joints:
+      - shoulder_yaw_joint
+      - shoulder_pitch_joint
+      - elbow_pitch_joint
+      - wrist_pitch_joint
+initial:  # Define initial robot poses.
+  - group: small_excavator_arm
+    pose: home

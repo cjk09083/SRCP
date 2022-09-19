@@ -1,0 +1,251 @@
+#! /usr/bin/env bash
+# 
+# Space Robotics Challenge, Phase 2
+# Copyright (c) 2019-2021, NASA-JSC. All Rights Reserved
+# Unauthorized Distribution Strictly Prohibited
+#
+
+# move to this directory
+_this_dir="$( cd "$(dirname "$0")" ; pwd -P )"
+pushd `pwd` > /dev/null 2>&1
+cd $_this_dir
+
+# Source helper scripts
+source "srcp2_setup.bash"
+source "gpu_and_x.bash"
+
+#image_repo="asme12/sucheducation"
+#image_tag="1.0"
+
+image_repo="scheducation/srcp2_comp"
+image_tag="final_competitor"
+
+run_image_repo="scheducation/srcp2_comp_solutions"
+run_image_tag="team_omega"
+
+#run_image_repo="asme12/comp"
+#run_image_tag="1.0"
+
+sim_container_name="srcp2-final"
+cmp_container_name="competitor-final"
+#cmp_container_name="asme12/total"
+
+# container constraints
+use_local="false"
+cpus=6
+mem="12g"
+
+cmp_volumes=""
+
+# Main SIM Ros Master Network Name
+simalias_name="simmaster"
+cmpalias_name="cmpsolution"
+srcp2net_name="srcp2net"
+
+function help(){
+    echo -e "${B}Summary:${rs}
+
+    This script manages the docker containers necessary to run the Space 
+    Robotics Simulation (Final). It starts the Docker containers, and 
+    configures the host correctly for XServer forwarding.
+    
+    Note that all short-form options are case-sensitive
+
+${B}General Options:${rs}
+    
+    ${B}-h | --help${rs}
+        Show this message and quit
+
+    ${B}-L | --local-docker${rs}
+        Use the local versions of the docker images (if they exist). This overrides
+        the default behaviour, which is to search for updates each time this
+        script is run.
+
+   ${B}-d | --developer${rs}
+        Developer mode with '/home/srcp2/cmp_workspace' from to host folder
+
+   ${B}-i | --interactive${rs}
+        Simply launch as normal, but override all runtime args with
+        interactive BASH shell
+
+   ${B}-t | --team${rs}
+        The Team Name Tag in the submision docker hub repo
+
+   ${B}-c | --cpus${rs}
+        Set number of CPUs available to this container. Default is ${cpus}
+
+   ${B}-m | --mem${rs}
+        Set GB of RAM available to this container. Default is ${mem}
+        Throttling this may result in undefined behavior
+
+${B}Copyright${rs}
+    
+    Space Robotics Challange, Phase 2
+    Copyright (c) 2019, 2020, 2021, NASA-JSC. All Rights Reserved
+    Unauthorized Distribution Strictly Prohibited
+"
+}
+
+# ______________________________________________________________________________________________________________________
+echo_header
+echo -e "${B}From host system:${rs}\n"
+
+for arg in "$@"; do
+  shift
+  case "$arg" in
+    "--help")        set -- "$@" "-h" ;;
+    "--local-docker") set -- "$@" "-L" ;;
+    "--interactive")  set -- "$@" "-i" ;;
+    "--developer")  set -- "$@" "-d" ;;
+    "--team")  set -- "$@" "-t" ;;
+    "--cpus") set -- "$@" "-c";;
+    "--mem")  set -- "$@" "-m";;
+    *) set -- "$@" "$arg"
+  esac
+done
+
+OPTIND=1
+while getopts hLdit:c:m: arg; do
+    case $arg in
+
+        h)
+            help
+            exit 0
+            ;;
+        L)
+            use_local="true"
+            ;;
+        d)
+            cmp_volumes="developer"
+            ;;
+        i)
+            interactive="-it"
+            override_command="/bin/bash"
+            ;;
+        t)
+            image_repo=$run_image_repo
+            image_tag=$run_image_tag
+            interactive="-it"
+            if [ -z ${OPTARG} ]; then
+                image_tag=$image_tag
+            else 
+                image_tag=$OPTARG
+            fi
+            ;;
+        c)
+            cpus=$OPTARG
+            ;;
+        m)
+            mem="${OPTARG}g"
+            ;;
+        *)
+            echo -e "$echo_error input option '$arg' is not supported"
+            quit_with_popd 1
+            ;;
+    esac
+done
+
+
+
+# update docker images
+if [[ "$use_local" == "false" ]]; then
+    if ! docker pull "${image_repo}:${image_tag}"; then
+        echo -e "$echo_error Docker pull failed"
+        exit 1
+    fi
+    echo -e "$echo_ok image update complete"
+else
+    echo -e "$echo_warn Using local versions of the docker images, will ${B}not${rs} check Dockerhub for updates"
+fi
+
+
+
+# Display run state information to user (dev and comp)
+echo
+echo -e "$echo_info running image    : ${b}${image_repo}:${image_tag}${rs}"
+echo -e "$echo_info container name   : ${b}$cmp_container_name${rs}"
+echo -e "$echo_info volumes from name: ${b}$sim_container_name${rs}"
+echo -e "$echo_info scripts folder   : ${b}$_this_dir${rs}"
+
+
+if [ -z $interactive ]; then
+    echo
+    echo -e "$echo_info Simulation container started. Gazebo startup typically takes a few seconds"
+    echo -e "$echo_info run ${b}docker kill $container_name${rs} to stop, or await sim timeout"
+else
+    echo
+    echo -e "$echo_info Running in interactive mode. Starting a BASH shell..."
+fi
+
+echo
+
+# Setup the Host for Development or Run Team
+echo
+if [[ $cmp_volumes =~ "developer" ]]; then
+    cmp_host_path=$(cd ../../cmp_workspace && pwd)
+    if [[ ! -d $cmp_host_path ]]; then
+        echo -e "$echo_error This machine does not have access to competitor source code. ${r}Cannot run as developer!${rs} Nice try"
+        exit 1
+    fi
+    cmp_volumes="--volume=${cmp_host_path}:/home/srcp2/cmp_workspace:rw"
+else
+    image_repo=$run_image_repo
+    image_tag=$run_image_tag
+    interactive="-it"
+    echo -e "$echo_info Running the Built Solution in the the Submittion Image : ${b} ${run_image_repo} ${rs} Teame Tag : ${b} ${run_image_tag} ${rs}..."
+fi
+echo
+
+
+echo -e "$echo_info Confirming Network Setup: ${b} Network Setup${rs}..."
+if ! docker network ls | grep -q "$srcp2net_name"; then
+    echo -e "$echo_info Setting up as ${b} Bridge $srcp2net_name${rs}"
+    docker network create --driver=bridge $srcp2net_name
+    echo 
+else
+    echo -e "$echo_info Existing network found: ${b}$srcp2net_name${rs}"
+fi
+echo -e "$echo_info Network Setup is now ${b} ready as $srcp2net_name${rs}..."
+echo
+
+echo -e "${B}________________________________________________________________________________________________________________________${rs}"
+echo -e "${B}From Container:${rs}"
+echo
+
+
+# X Server / Display 
+if ! x_host_setup; then
+    echo -e "$echo_error Host X-Server setup failed"
+    exit 1
+fi
+# XServer
+xsock="/tmp/.X11-unix"
+xauth="/tmp/.docker.xauth"
+echo -e "$echo_info X Display ${b}Setup Done${rs}"
+
+
+
+
+docker run --rm \
+    --name $cmp_container_name\
+    --user 1001:1001 \
+    $interactive \
+    --env="DISPLAY"=$DISPLAY \
+    --volume="/etc/group:/etc/group:ro"   \
+    --volume="/etc/passwd:/etc/passwd:ro" \
+    --volume="/etc/shadow:/etc/shadow:ro" \
+    --env=XAUTHORITY=$xauth \
+    --volume=$xsock:$xsock:rw \
+    --volume=$xauth:$xauth:rw \
+    --volume=/dev/log:/dev/log:rw \
+    --device=/dev/dri:/dev/dri \
+    --network $srcp2net_name \
+    --gpus=all \
+    --network-alias $cmpalias_name \
+    --env=ROS_MASTER_URI="http://${simalias_name}:11311" \
+    --cpus=$cpus \
+    --memory=$mem \
+    $cmp_volumes \
+    "${image_repo}:${image_tag}"  $override_command
+
+exit $?

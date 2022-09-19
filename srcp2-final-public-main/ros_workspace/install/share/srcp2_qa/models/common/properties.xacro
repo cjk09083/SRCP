@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	This XACRO file defines key robot constants for all marks of small rover
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+	<!-- _______________________________________________________________________________________________________________
+         Common Constants Definition
+    -->
+
+	<!-- Chassis -->
+	<xacro:property name="chassis_height" value="0.1" />
+	<xacro:property name="chassis_length" value="1"/>
+	<xacro:property name="chassis_width" value="1" />
+	<xacro:property name="chassis_mass" value="50"/>
+
+	<xacro:property name="support_height" value="${wheel_radius}" />
+	<xacro:property name="support_length" value="${chassis_length * 0.9}"/>
+	<xacro:property name="support_width" value="${chassis_width * 0.9}" />
+	<xacro:property name="support_mass" value="100"/>
+	
+
+	<!-- Wheels -->
+	<xacro:property name="wheel_mu1" value="0.9"/>
+	<xacro:property name="wheel_mu2" value="0.9"/>
+
+	<xacro:property name="wheel_width" value="0.1"/>
+	<xacro:property name="wheel_radius" value="0.25"/>
+	<xacro:property name="wheel_mass" value="10"/>
+
+</robot>

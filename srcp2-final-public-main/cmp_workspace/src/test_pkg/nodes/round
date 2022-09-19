@@ -1,0 +1,1152 @@
+#!/usr/bin/env python3
+
+# Authors: Hongik #
+
+import math
+import os
+import select
+import sys
+
+import rospy
+import rosservice
+import tf
+import time
+import ctypes
+import struct
+import tf2_ros
+
+# import pcl
+
+# from ._pcl import *
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, PoseWithCovarianceStamped, PoseStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan, Imu, Image, PointCloud2, PointField, JointState
+from srcp2_msgs.msg import VolSensorMsg
+from std_msgs.msg import Float64
+from tf.transformations import euler_from_quaternion
+# from darknet_ros_msgs.msg import BoundingBoxes
+
+import sensor_msgs.point_cloud2 as pc2
+import numpy as np
+import numpy.linalg as lin
+
+if os.name == 'nt':
+    import msvcrt
+else:
+    import tty, termios
+LINEAR_VEL = 0.22
+STOP_DISTANCE = 4.0
+STOP_DISTANCE_YOLO = 5.0
+LIDAR_ERROR = 0.1
+err_code = 0
+get_pose = True
+# get_pose = False
+
+SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR
+pub = rospy.Publisher('small_scout_1/skid_cmd_vel', Twist, queue_size=10)
+sensor_pitch = rospy.Publisher('small_scout_1/sensor/pitch/command/position', Float64, queue_size=10)
+odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
+scan_pub = rospy.Publisher("scan", LaserScan, queue_size=10)
+PoseWithCovarianceStamped_pub = rospy.Publisher("initialpose", PoseWithCovarianceStamped, queue_size=50)
+# rostopic pub /scout_1/sensor_controller/command std_msgs/Float64 "data: 0.5"
+
+FR_pub = rospy.Publisher("small_scout_1/front_right_wheel/steer/command/position", Float64, queue_size=10)
+FL_pub = rospy.Publisher("small_scout_1/front_left_wheel/steer/command/position", Float64, queue_size=10)
+BR_pub = rospy.Publisher("small_scout_1/back_right_wheel/steer/command/position", Float64, queue_size=10)
+BL_pub = rospy.Publisher("small_scout_1/back_left_wheel/steer/command/position", Float64, queue_size=10)
+
+fl_vel_pub = rospy.Publisher('small_scout_1/front_left_wheel/drive/command/velocity', Float64, queue_size=10)
+fr_vel_pub = rospy.Publisher('small_scout_1/front_right_wheel/drive/command/velocity', Float64, queue_size=10)
+bl_vel_pub = rospy.Publisher('small_scout_1/back_left_wheel/drive/command/velocity', Float64, queue_size=10)
+br_vel_pub = rospy.Publisher('small_scout_1/back_right_wheel/drive/command/velocity', Float64, queue_size=10)
+
+fr_float64 = Float64()
+fl_float64 = Float64()
+br_float64 = Float64()
+bl_float64 = Float64()
+
+turn_ratio = 0.5
+
+fl_vel = 0
+fr_vel = 0
+bl_vel = 0
+br_vel = 0
+
+light_data = 'high'  # stop / low / high
+light_service_name = '/small_scout_1/spot_light'
+light_srv_class = rosservice.get_service_class_by_name(light_service_name)
+light_srv_client = rospy.ServiceProxy(light_service_name, light_srv_class)
+
+settings = termios.tcgetattr(sys.stdin)
+speed = math.pi * 2
+tnspeed = 1
+sigma = 4
+goal_x = 0
+goal_y = 0
+
+roll = 0
+pitch = 0
+yaw = 0
+
+start_y = 0.0
+start_x = 0.0
+start_z = 0.0
+start_roll = 0.0
+start_pitch = 0.0
+start_yaw = 0.0
+
+dt = 0.2
+A = np.array([[1, dt], [0, 1]])
+H = np.array([[1, 0]])
+Q = np.array([[0.001, 0], [0, 0.01]])
+R = 0.1
+P = 3 * np.eye(2)
+x_0 = 0.0
+xp = 0.0
+# xp2 = np.array([0, 0, 0])
+xp2 = 0
+
+call_step = 0
+
+yaw = 0.0
+yaw_d = 0.0
+yaw_o = 0.0
+center = 0.0
+center_of_cmd_x = 0.0
+width_raw = 0.0
+width_kf = 0.0
+distance = 0.0
+
+base_x = 0.0
+base_y = 0.0
+base_z = 0.0
+
+cal_x = 0.0
+cal_y = 0.0
+cal_x2 = 0.0
+cal_y2 = 0.0
+x_point = 0
+y_point = 0
+angle_point = np.zeros((360, 2))
+angle_filter_size = 40
+points = np.zeros((angle_filter_size, 2))
+pitch_points = np.zeros((angle_filter_size, 1))
+
+slam = False
+slam_check = False
+center_check = True
+turn_to_goal = False
+find_object = True
+
+turn_circle = False
+
+center_check_time = 0.0
+
+goal_set = 45
+goal = 1
+
+goal_point = [[base_x, base_y],
+              [-56, 46],  # 1 (1)
+              [-57, 13],  # 2
+              [2, 48],  # 3 (2)
+              [-23, 48],  # 4
+              [52, 33],  # 5 (3)
+              [28, 43],  # 6
+              [57, -49],  # 7 (4)
+              [0, -46],  # 8
+              [-42, -20],  # 9 (5)
+              [-58, -48],  # 10
+              [0, -46],  # 11
+              [0, 18], [16, 23], [30, 11],
+              [29, 0], [18, -13], [17, -26],
+              [0, -33], [-17, -28], [-20, -16],
+              [-22, -3], [-24, 9], [-15, 21]]
+
+dt = 0.2
+F = np.array([[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]])
+aX = 1
+G = np.array([[(dt * dt) / 2, 0], [0, (dt * dt) / 2], [dt, 0], [0, dt]])  # 4*2
+Qm = np.dot(np.dot(G, np.eye(2)), G.T)
+g_Xs = np.zeros((4, 1))
+g_Ps = np.eye(4)
+g_Ps[0, 0] = 100
+g_Ps[1, 1] = 100
+
+before_score_time = rospy.Time(0)
+
+base_center = 0
+base_y_center = 0
+base_rng = 0
+base_y_rng = 0
+
+rock_center = 0
+rock_rng = 0
+rock_y_center = 0
+rock_y_rng = 0
+rock_min = 0
+rock_max = 0
+rock_x_pose_min = 0
+rock_x_pose_max = 0
+rock_y_pose_min = 0
+rock_y_pose_max = 0
+
+v_index = 0
+vol_center = 0
+vol_y_center = 0
+vol_type = ""
+vol_rng = 0
+pre_vol_type = ""
+vol_index = 30
+pre_vol_index = 0
+vol_x = 0.0
+vol_y = 0.0
+vol_dis = 0.0
+vol_stop = False
+brake_data = 0.0
+vol_point = np.zeros((28, 5))
+# vol_type_array = np.empty((28, 1))
+# vol_type_array.astype(np.string_)
+vol_type_array = np.empty(28, dtype='<U16')
+# numpy.empty(10, dtype='s256')
+
+print(vol_type_array.dtype)
+
+hector_odom_x = 0.0
+hector_odom_y = 0.0
+
+odom_x = 0.0
+odom_y = 0.0
+odom_z = 0.0
+odom_roll = 0.0
+odom_pitch = 0.0
+odom_yaw = 0.0
+
+start_flag = 0
+
+imu_yaw = 0.0
+imu_pitch = 0.0
+imu_init = True
+
+far_from_base = [0.0, 0.0]
+
+object_index = 0
+object_distance = 0
+base_distance = 0
+
+object_x_center = 0
+object_y_center = 0
+
+object_x = 0.0
+object_y = 0.0
+object_z = 0.0
+
+true_object_x = -26.24
+true_object_y = 9.245
+true_object_z = 15.585
+
+true_base_x = 17.545
+true_base_y = -5.46
+true_base_z = 2.85
+
+object_locate_index = 0.0
+base_locate_index = 0.0
+object_size = 0.0
+base_size = 0.0
+
+angle_default = 0.0
+float64 = Float64()  # camera angle
+float64.data = angle_default
+
+marker_x_center = 0
+marker_x_range = 0
+marker_y_center = 0
+marker_y_range = 0
+
+find_object_time = 0.0
+
+score = 0
+calls = 0
+
+pre_obs_base_y = 0
+find_base_time = rospy.Time(0)
+
+imu_init = True
+
+bl_joint = 0.0
+GTG = False
+
+
+def vol_callback(volt_msg):
+    try:
+        global vol_type, vol_dis, pre_vol_type, vol_index, pre_vol_index, \
+            center_check, center, before_score_time, v_index, vol_x, vol_y, vol_stop, brake_data, vol_point
+        vol_type = volt_msg.vol_type
+        vol_dis = volt_msg.distance_to
+        rospy.loginfo('Found vol!!! type : %s, distance : %d x : %f, y : %f',
+                      vol_type, vol_dis, odom_x, odom_y)
+
+    except Exception as e:
+        global err_code
+        err_code = 3
+        print("vol_callback except Error : ",e)
+        pass
+
+
+def get_joint(joint_data):
+    global bl_joint
+    bl_joint = joint_data.position[1]
+
+
+def move_con(go, turn):
+    global fl_vel, fr_vel, bl_vel, br_vel, fr_float64, fl_float64, br_float64, bl_float64
+    turn_ratio = 3
+    if turn > 0:
+        if abs(turn) > 0.8:
+            fr_float64 = math.pi / 4
+            fl_float64 = - math.pi / 4
+            br_float64 = - math.pi / 4
+            bl_float64 = math.pi / 4
+            fl_vel = math.pi * turn
+            fr_vel = -math.pi * turn
+            bl_vel = math.pi * turn
+            br_vel = -math.pi * turn
+        else:
+            fr_float64 = 0
+            fl_float64 = 0
+            br_float64 = 0
+            bl_float64 = 0
+            turn = turn * turn_ratio
+            fl_vel = turn + go
+            fr_vel = -turn + go
+            bl_vel = turn + go
+            br_vel = -turn + go
+
+    elif turn < 0:
+        if abs(turn) > 0.8:
+            fr_float64 = math.pi / 4
+            fl_float64 = - math.pi / 4
+            br_float64 = - math.pi / 4
+            bl_float64 = math.pi / 4
+            fl_vel = math.pi * turn
+            fr_vel = -math.pi * turn
+            bl_vel = math.pi * turn
+            br_vel = -math.pi * turn
+        else:
+            fr_float64 = 0
+            fl_float64 = 0
+            br_float64 = 0
+            bl_float64 = 0
+            turn = turn * turn_ratio
+            fl_vel = turn + go
+            fr_vel = -turn + go
+            bl_vel = turn + go
+            br_vel = -turn + go
+
+    else:
+        fl_vel = go
+        fr_vel = go
+        bl_vel = go
+        br_vel = go
+        fr_float64 = 0
+        fl_float64 = 0
+        br_float64 = 0
+        bl_float64 = 0
+
+    fr_vel_pub.publish(fl_vel)
+    fl_vel_pub.publish(fr_vel)
+    br_vel_pub.publish(bl_vel)
+    bl_vel_pub.publish(br_vel)
+    FR_pub.publish(fr_float64)
+    FL_pub.publish(fl_float64)
+    BR_pub.publish(br_float64)
+    BL_pub.publish(bl_float64)
+
+
+def odom_gen(scout1_data):
+    global start_x, start_y, start_z, start_roll, start_pitch, start_yaw, imu_init
+
+    start_pose = scout1_data.pose
+    init_x = start_pose.position.x
+    init_y = start_pose.position.y
+    init_z = start_pose.position.z
+
+    list_orientation = [start_pose.orientation.x, start_pose.orientation.y,
+                        start_pose.orientation.z, start_pose.orientation.w]
+    init_roll, init_pitch, init_yaw = euler_from_quaternion(list_orientation)
+
+    start_yaw = start_yaw - math.degrees(imu_yaw - init_yaw)
+    start_pitch = start_pitch - math.degrees(imu_pitch - init_pitch)
+
+    reset_odom_service_name = '/small_scout_1/reset_odom_to_pose'
+    reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+    reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+    reset_odom_srv_client(init_x, init_y, init_z, init_roll, init_pitch, init_yaw)
+
+    imu_init = False
+
+
+def srv_enable_robot_position_callback(robot_name, data):
+    rospy.wait_for_service(robot_name + '/get_true_pose')
+    try:
+        pose_service_name = robot_name + '/get_true_pose'
+        pose_srv_class = rosservice.get_service_class_by_name(pose_service_name)
+        pose_srv_client = rospy.ServiceProxy(pose_service_name, pose_srv_class)
+        robot_pos = pose_srv_client(data)
+        # robot_position_srv = rospy.ServiceProxy(robot_name+'/get_true_pose', LocalizationSrv)
+        # robot_pos = robot_position_srv(data)
+        print(robot_pos)
+        odom_gen(robot_pos)
+        return robot_pos
+    except rospy.ServiceException as e:
+        print("Get true pose Service call failed: %s" % e)
+        pass
+
+
+def imu_callback(incomming_msg):
+    try:
+        list_orientation = [incomming_msg.orientation.x, incomming_msg.orientation.y,
+                            incomming_msg.orientation.z, incomming_msg.orientation.w]
+        rolls, pitchs, yaws = euler_from_quaternion(list_orientation)
+        global imu_yaw, imu_pitch, points, angle_point, start_yaw, imu_init, start_pitch
+        yaw_or = math.radians(math.degrees(yaws) + start_yaw)
+
+        point = np.array([math.cos(yaw_or), math.sin(yaw_or)])
+
+        N_size = angle_filter_size
+        global x_point, y_point
+        x_point = 0
+        y_point = 0
+        pitch_sum = 0
+        for i in range(N_size, 1, -1):
+            points[i - 1] = points[i - 2]
+            pitch_points[i - 1] = pitch_points[i - 2]
+            x_point = x_point + points[i - 1][0]
+            y_point = y_point + points[i - 1][1]
+            pitch_sum = pitch_sum + pitch_points[i - 1]
+        points[0] = point
+        pitch_points[0] = pitchs
+        x_point = x_point + points[0][0]
+        y_point = y_point + points[0][1]
+        pitch_sum = pitch_sum + pitch_points[0]
+        # print(points[0])
+        # rospy.loginfo("point is [%f , %f]", point[0], point[1])
+
+        x_point = x_point / N_size
+        y_point = y_point / N_size
+        if imu_init:
+            init_yaw = math.atan2(y_point, x_point)
+            init_pitch = pitch_sum / N_size
+            if start_yaw != 0 and points[N_size - 1][0] != 0:
+                start_yaw = start_yaw - (math.degrees(init_yaw) - yaw_d)
+                start_pitch = start_pitch - (math.degrees(init_pitch) - math.degrees(pitch))
+                imu_init = False
+
+        else:
+            imu_pitch = pitch_sum / N_size
+            imu_yaw = math.atan2(y_point, x_point)
+    except ValueError as e:
+        global err_code
+        err_code = 1
+        print("imu_callback except Error", e)
+        pass
+
+
+def odom_callback(odom_data):
+    try:
+        global start_flag, odom_x, odom_y, odom_z, odom_roll, odom_pitch, odom_yaw, roll, pitch, yaw, yaw_d, \
+            start_x, start_y, start_z, start_roll, start_pitch, start_yaw, speed
+        now_pose = odom_data.pose.pose
+        odom_x = now_pose.position.x
+        odom_y = now_pose.position.y
+        odom_z = now_pose.position.z
+
+        list_orientation = [now_pose.orientation.x, now_pose.orientation.y,
+                            now_pose.orientation.z, now_pose.orientation.w]
+        odom_roll, odom_pitch, odom_yaw = euler_from_quaternion(list_orientation)
+
+        if odom_yaw != 0:
+            roll = odom_roll
+            pitch = odom_pitch
+            yaw = odom_yaw
+            yaw_d = math.degrees(odom_yaw)
+            # if math.degrees(pitch) < -10:
+            #     speed = speed + 0.1
+            # else:
+            #     speed = 2.0
+
+        if start_flag == 0:
+            start_flag = 1
+            start_x = odom_x
+            start_y = odom_y
+            start_z = odom_z
+            start_yaw = yaw_d
+            start_pitch = odom_pitch
+        #     scout_1_pos = srv_enable_robot_position_callback('/scout_1',True)
+        #     odom_gen(scout_1_pos)
+    except Exception as e:
+        global err_code
+        err_code = 2
+        print("odom_callback except Error")
+        pass
+
+
+def kf(x_new):
+    try:
+        global xp, P, R
+        Pp = np.dot(np.dot(A, P), A.T) + Q
+        K = np.dot(np.dot(Pp, H.T), lin.inv(np.dot(np.dot(H, Pp), H.T) + R))
+        x = xp + K * (x_new - np.dot(H, xp))
+        P = Pp - np.dot(np.dot(K, H), Pp)
+        xp = x
+        return x
+    except Exception as e:
+        global err_code
+        err_code = 5
+        return x_new
+
+
+def kf2(x_new):
+    try:
+        global xp2, P, R
+        Pp = np.dot(np.dot(A, P), A.T) + Q
+        K = np.dot(np.dot(Pp, H.T), lin.inv(np.dot(np.dot(H, Pp), H.T) + R))
+        x = xp2 + K * (x_new - np.dot(H, xp2))
+        P = Pp - np.dot(np.dot(K, H), Pp)
+        xp2 = x
+        return x
+    except Exception as e:
+        global err_code
+        err_code = 5
+        return x_new
+
+
+class Obstacle:
+    def __init__(self):
+        # self._cmd_pub = rospy.Publisher('scout_1/skid_cmd_vel', Twist, queue_size=1)
+        self.obstacle()
+
+    def getKey(self):
+        if os.name == 'nt':
+            return msvcrt.getch()
+        tty.setraw(sys.stdin.fileno())
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if rlist:
+            key = sys.stdin.read(1)
+        else:
+            key = ''
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+        return key
+
+    def cmd_check(self, target_linear_vel, target_angular_vel, turtlebot_moving, GTG):
+        try:
+            key = self.getKey()
+            global goal_x, goal_y, slam, goal, center_check, center, turn_to_goal, find_object_time, \
+                fr_float64, fl_float64, br_float64, bl_float64, find_object, object_x_center, turn_circle, speed, \
+                fl_vel, fr_vel, bl_vel, br_vel
+
+            if key == 'w':
+                GTG = False
+                fl_vel = speed
+                fr_vel = speed
+                bl_vel = speed
+                br_vel = speed
+                fr_float64 = 0
+                fl_float64 = 0
+                br_float64 = 0
+                bl_float64 = 0
+                print("go : ", speed)
+            elif key == 'x':
+                GTG = False
+                fl_vel = -speed
+                fr_vel = -speed
+                bl_vel = -speed
+                br_vel = -speed
+                fr_float64 = 0
+                fl_float64 = 0
+                br_float64 = 0
+                bl_float64 = 0
+                print("back : ", speed)
+            elif key == 'a':
+                GTG = False
+                fl_vel = speed * turn_ratio
+                fr_vel = -speed * turn_ratio
+                bl_vel = speed * turn_ratio
+                br_vel = -speed * turn_ratio
+                fr_float64 = math.pi / 4
+                fl_float64 = - math.pi / 4
+                br_float64 = - math.pi / 4
+                bl_float64 = math.pi / 4
+                print("left : ", speed)
+            elif key == 'd':
+                GTG = False
+                fl_vel = -speed * turn_ratio
+                fr_vel = speed * turn_ratio
+                bl_vel = -speed * turn_ratio
+                br_vel = speed * turn_ratio
+                fr_float64 = math.pi / 4
+                fl_float64 = - math.pi / 4
+                br_float64 = - math.pi / 4
+                bl_float64 = math.pi / 4
+                print("right : ", speed)
+            elif key == 'g':
+                GTG = True
+                rospy.loginfo('Go to goal!!')
+            elif key == 'j':
+                goal_x = goal_x - 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'l':
+                goal_x = goal_x + 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'i':
+                goal_y = goal_y + 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'k':
+                goal_y = goal_y - 10
+                rospy.loginfo('goal is %d, %d', goal_x, goal_y)
+            elif key == 'o':
+                speed = speed - 0.1
+                fl_vel = speed
+                fr_vel = speed
+                bl_vel = speed
+                br_vel = speed
+                print("speed down : ", speed)
+            elif key == 'p':
+                speed = speed + 0.1
+                fl_vel = speed
+                fr_vel = speed
+                bl_vel = speed
+                br_vel = speed
+                print("speed down : ", speed)
+            elif key == ' ' or key == 's':
+                GTG = False
+                fl_vel = 0
+                fr_vel = 0
+                bl_vel = 0
+                br_vel = 0
+                fr_float64 = 0
+                fl_float64 = 0
+                br_float64 = 0
+                bl_float64 = 0
+                print("stop : ", speed)
+            elif key == 'q':
+                rospy.loginfo('Quit!!')
+                quit()
+                # os.system("")
+                rospy.signal_shutdown("Quit signal")
+
+            return target_linear_vel, target_angular_vel, turtlebot_moving, GTG
+        except Exception as e:
+            global err_code
+            if err_code == 0:
+                err_code = 8
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('Quit signal!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            rospy.loginfo('get key error!!')
+            return target_linear_vel, target_angular_vel, turtlebot_moving, GTG
+            pass
+
+    def cal(self, x, y, z, angle, dis, gradient, dt, twists):
+        global err_code
+        try:
+            # x_pose,y_pose,z_pose=self.cal(x_pose,y_pose,z_pose,angle,interval*1.5,0)
+            if dt == 0:
+                dt = 0.1
+                err_code = 9
+                print("cal dt zero Error")
+            theta = math.radians(angle)
+            alpha = gradient
+            ran = dis / sigma
+            r_dot = ran * math.cos(alpha)
+            x_dot = r_dot * math.cos(theta)
+            y_dot = r_dot * math.sin(theta)
+            z_dot = ran * math.sin(alpha)
+            x = x + x_dot
+            y = y + y_dot
+            z = z - z_dot
+
+            velEst = np.array([x_dot / dt, y_dot / dt])
+
+            return x, y, z, velEst
+        except Exception as e:
+            err_code = 9
+            print("cal except Error")
+            return x, y, z, 0.0
+
+    def obstacle(self):
+        global turn_to_goal, vol_rng, goal_x, goal_y, center_check, slam_check, goal, dt, start_flag, \
+            base_x, base_y, goal_point, center, speed, far_from_base, err_code, vol_dis, vol_stop, brake_data, \
+            fr_float64, fl_float64, br_float64, bl_float64, vol_point, float64, find_object_time, \
+            find_object, call_step, object_x_center, marker_x_center, turn_circle, \
+            slam
+
+        auto_start = False
+
+        twist = Twist()
+
+        turning = False
+        pre_turn = False
+        turtlebot_moving = False
+        GTG = False
+        boundary = False
+
+        step_goal = False
+        reset_odom = False
+
+        angle_range = range(0, 100)  # 0~100 is 0~180 degree,
+        target_linear_vel = 0.0
+        target_angular_vel = 0.0
+        clock = rospy.get_time()
+        current_time = rospy.Time.now()
+        last_time = rospy.Time.now()
+        x_pose = start_x
+        y_pose = start_y
+        z_pose = start_z
+        interval = 0.0
+        angle = 0.0
+        target_x = 0
+        target_y = 0
+        target_angle = 0
+        obs_flag = 0
+        turn_flag = 0
+        center_check_flag = 0
+        object_check_flag = 0
+        pre_x_pose = 0.0
+        pre_y_pose = 0.0
+        pre_yaw = 0.0
+        light_data_f = 1.0
+        center_chk_time = rospy.Time.now()
+        move_wait_time = rospy.Time.now()
+        wait_x_pose = 0.0
+        wait_y_pose = 0.0
+        pre_center = 0.0
+        base_flag = 0
+        first_found_object_flag = 0
+        pre_fl_float64 = 0
+        before_call_time = rospy.Time.now()
+        find_time = 80.0
+        forward_time = 30.0
+        go_time = find_time + forward_time
+        get_pose_result = 0
+        backward_flag = 0
+        time_offset = 0.0
+        recall_time = 0.0
+
+        finding_object_goal_x = 0
+        finding_object_goal_y = 0
+        find_both_go = False
+        # rospy.loginfo('Change sensor to %f', float64.data)
+        # if float64.data != 0:
+        #     for i in range(500):
+        #         pub2.publish(float64)
+        #         rospy.loginfo('Change sensor to %f', float64.data)
+
+        float64.data = 0.35
+
+        while not rospy.is_shutdown():
+            # rospy.loginfo('rospy.is_shutdown()? %s', rospy.is_shutdown())
+            try:
+                rospy.loginfo('Try start')
+
+                # pub2.publish(float64)
+                pre_mindistance = 200
+                pre_index = 0
+                min_distance = 200
+                index = 0
+                target_linear_vel, target_angular_vel, turtlebot_moving, GTG = \
+                    self.cmd_check(target_linear_vel, target_angular_vel, turtlebot_moving, GTG)
+                try:
+                    scan = rospy.wait_for_message('small_scout_1/laser/scan', LaserScan, timeout=1)
+                except rospy.ROSException as e:
+                    # rospy.loginfo('Timeout while waiting for scan info')
+                    # rospy.logerr("Timeout while waiting for scan info!")
+                    err_code = 15
+                    raise e
+                scan_result = LaserScan()
+                scan_result.header = scan.header
+                scan_result.angle_increment = scan.angle_increment
+                scan_result.angle_min = scan.angle_min
+                scan_result.angle_max = scan.angle_max
+                scan_result.intensities = scan.intensities
+                scan_result.scan_time = scan.scan_time
+                scan_result.range_max = 100.0
+                con_ref = 35
+                con = con_ref
+                obs_start = 0
+                obs_index = 0
+                obs_end = 0
+                angle_add = 0
+                turn_dir = 0
+                pre_turn_dir = 0
+                obs_i = []
+                obs_r = [float('inf') for _ in angle_range]
+                max_con = 0
+                pre_lidar_distances = 0
+                pre2_lidar_distances = 0
+
+                max_distance = 9.5
+
+                max_i = 0
+                avoid_ref = 45
+                too_close = 0
+                tc_start = 0
+                tc_end = 0
+                turning = False
+                con_end = False
+                # rospy.loginfo('Try scan check')
+                for i in angle_range:
+                    lidar_distances = scan.ranges[i]
+
+                    if not turning:
+                        #  CONTINUITY
+                        if i >= 99:
+                            con += con_ref
+                        if not con_end and lidar_distances != 0:
+                            if lidar_distances < 1:
+                                if tc_start == 0:
+                                    tc_start = i
+                                too_close = too_close + 1
+                                tc_end = i
+                            if con == 0:
+                                obs_start = i
+                            if abs((pre2_lidar_distances + pre_lidar_distances) / 2
+                                   - (pre_lidar_distances + lidar_distances) / 2) < 2:
+                                con = con + 1
+                            else:
+                                con_end = True
+                        else:
+                            if con > max_con:
+                                max_con = con
+                            if 15 < con < 95:
+                                rospy.loginfo('Continous %d : MAX is %d , i: %d !!', con, max_con, i)
+                            if 15 < con < con_ref:
+                                for con_index in range(obs_start, i):
+                                    # obs_i.append(con_index)
+                                    obs_r[con_index] = scan.ranges[con_index]
+                                min_distance = pre_mindistance
+                                if min_distance < STOP_DISTANCE:
+                                    index = pre_index
+                                    # rospy.loginfo('Find obs %f !!', obs_index)
+
+                                    rospy.loginfo('Find obs con %d to %d !! r=%f, i=%f',
+                                                  obs_start, i, min_distance, index)
+                                    obs_index = obs_index + 1
+                                    pre_mindistance = 200
+                                    max_i = i
+                                    turning = True
+                                    if abs(math.degrees(odom_pitch)) > 10:  # too H/L angle don't turn
+                                        rospy.loginfo('Too H/L angle : %f', math.degrees(odom_pitch))
+                                        # turning = False
+                            con = 0
+                            con_end = False
+                        if pre_mindistance > lidar_distances:
+                            pre_mindistance = lidar_distances
+                            pre_index = i
+                            # rospy.loginfo('LOW! %f, %f', min_distance,i)
+                    pre2_lidar_distances = pre_lidar_distances
+                    pre_lidar_distances = lidar_distances
+
+                if turtlebot_moving or GTG:
+                    target_linear_vel = speed
+
+                if turning:
+                    rospy.loginfo('Turn_flag up!! : %f', turn_flag)
+                    if turn_flag < 3:
+                        turning = False
+                    turn_flag = turn_flag + 1
+
+                else:
+                    rospy.loginfo('Turn_flag do!! : %f', turn_flag)
+                    turn_flag = turn_flag - 1
+                    if turn_flag < 0:
+                        turn_flag = 0
+
+                rospy.loginfo('Check!! Turning : %d, GTG : %d, TM : %d, CC : %d, TTG : %d, SLAM : %d',
+                              turning, GTG, turtlebot_moving, center_check, turn_to_goal, slam_check)
+
+                if (turning and GTG and not turn_to_goal and not turn_circle) or \
+                        (turning and turtlebot_moving and not turn_to_goal and not turn_circle):
+                    turn_ref = 40
+                    angle_add = 10
+                    turn_spd = tnspeed * (50 - abs(index - 50)) / 20
+                    # rospy.loginfo('Try Avoid')
+                    if index < 50:
+                        # turn_spd = tnspeed * abs(index-50) / 10
+                        if turn_spd < 1:
+                            turn_spd = 1
+
+                        if turn_flag > 9:
+                            step_goal = True
+                            obs_yaw = yaw_d + (index - 50) * 74 / 50
+                            turn_yaw = math.radians(obs_yaw + 50)
+                            goal_x = x_pose + 10 * math.cos(turn_yaw)
+                            goal_y = y_pose + 10 * math.sin(turn_yaw)
+                            turn_flag = 0
+                        index = max_i
+                        rospy.loginfo('Left Avoid angle is %d to %d ', 50 - turn_ref - angle_add, 50 - turn_ref)
+
+                        if (50 - turn_ref) > index > (50 - turn_ref - angle_add):
+                            target_linear_vel = speed
+                            turn_speed = 0.3
+                            turn_flag = turn_flag - 1
+                            rospy.loginfo('Enough left turn go!! %f speed : %f', index, turn_speed)
+
+                        else:
+                            target_linear_vel = -0.1
+                            if too_close > 5:
+                                target_linear_vel = -1
+                            turn_speed = turn_spd
+                            rospy.loginfo('Turn left avoid!! %f speed : %f', index, turn_speed)
+                    else:
+                        if turn_spd < 1:
+                            turn_spd = 1
+                        if turn_flag > 9:
+                            step_goal = True
+                            obs_yaw = yaw_d + (index - 50) * 74 / 50
+                            turn_yaw = math.radians(obs_yaw - 50)
+                            goal_x = x_pose + 10 * math.cos(turn_yaw)
+                            goal_y = y_pose + 10 * math.sin(turn_yaw)
+                            turn_flag = 0
+                        index = obs_start
+                        rospy.loginfo('Right Avoid angle is %d to %d ', 50 + turn_ref, 50 + turn_ref + angle_add)
+
+                        if (50 + turn_ref + angle_add) > index > (50 + turn_ref):
+                            target_linear_vel = speed
+                            turn_speed = -0.3
+                            turn_flag = turn_flag - 1
+                            rospy.loginfo('Enough right turn go!! %f speed : %f', index, turn_speed)
+                        else:
+                            target_linear_vel = -0.1
+                            if too_close > 5:
+                                target_linear_vel = -1
+                            turn_speed = -turn_spd
+                            rospy.loginfo('Turn right avoid !! %f speed : %f', index, turn_speed)
+                            boundary = True
+                            turn_dir = 2
+                    rospy.loginfo('avoid!')
+                    twist.linear.x = target_linear_vel
+                    twist.angular.z = turn_speed
+                    # interval = rospy.get_time() - clock
+                    # clock = rospy.get_time()
+                    current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                    dt = (current_time - last_time).to_sec()
+                    if dt == 0:
+                        err_code = 13
+                        dt = 0.1
+                        rospy.loginfo('dt Zero Error!!! %d ', err_code)
+
+                    if abs(twist.angular.z) > 0.8:
+                        fr_float64.data = 0.78
+                        fl_float64.data = -0.78
+                        br_float64.data = -0.78
+                        bl_float64.data = 0.78
+                    else:
+                        fr_float64.data = 0.0
+                        fl_float64.data = 0.0
+                        br_float64.data = 0.0
+                        bl_float64.data = 0.0
+
+                    # angle = angle + turn_speed * interval
+                    angle = yaw_d
+                    x_pose, y_pose, z_pose, velEst = self.cal(x_pose, y_pose, z_pose, angle,
+                                                              dt * target_linear_vel, pitch, dt, twist)
+                    rospy.loginfo('Distance : %f , angle : %f ', min_distance, index * 1.48)
+                else:
+                    # rospy.loginfo('Try Go')
+                    if GTG:
+                        target_x = goal_x - x_pose
+                        target_y = goal_y - y_pose
+                        angle = yaw_d
+                        target_angle = math.degrees(math.atan2(target_y, target_x))
+                        turn_angle = target_angle - angle
+
+                        if turn_angle > 180:
+                            turn_angle = turn_angle - 360
+                        elif turn_angle < -180:
+                            turn_angle = turn_angle + 360
+
+                        turn_spd = tnspeed * abs(turn_angle) / 10
+                        if turn_spd > tnspeed:
+                            turn_spd = tnspeed
+                        elif turn_spd < 0.3:
+                            turn_spd = 0.3
+
+                        if 0 < turn_angle:
+                            target_angular_vel = turn_spd
+                            rospy.loginfo('Turn left!! angle : %d , speed : %f', turn_angle, turn_spd)
+                            if turn_angle < 5:
+                                target_linear_vel = speed
+                                turn_to_goal = False
+                            else:
+                                target_linear_vel = 0
+                                turn_to_goal = True
+
+                        if turn_angle < 0:
+                            rospy.loginfo('Turn right!! angle : %d , speed : %f', turn_angle, -turn_spd)
+                            target_angular_vel = -turn_spd
+                            if turn_angle > -5:
+                                target_linear_vel = speed
+                                turn_to_goal = False
+                            else:
+                                target_linear_vel = 0
+                                turn_to_goal = True
+
+                        if math.sqrt(math.pow(target_x, 2) + math.pow(target_y, 2)) < 5:
+                            stuck_flag = 0
+                            target_linear_vel = 0
+                            target_angular_vel = 0
+                            rospy.loginfo('Reach Goal  %d, %d ', goal_x, goal_y)
+                            if step_goal:
+                                step_goal = False
+                                goal_x = goal_point[goal][0]
+                                goal_y = goal_point[goal][1]
+
+                            else:
+                                goal += 1
+                                goal_x = goal_point[goal][0]
+                                goal_y = goal_point[goal][1]
+                                print("Go to next point")
+
+                    twist.linear.x = target_linear_vel
+                    twist.angular.z = target_angular_vel
+                    # interval = rospy.get_time() - clock
+                    # clock = rospy.get_time()
+                    current_time = rospy.Time.from_sec(rospy.Time.now().to_sec() + time_offset)
+                    dt = (current_time - last_time).to_sec()
+                    if dt == 0:
+                        err_code = 14
+                        dt = 0.1
+                        rospy.loginfo('dt Zero Error!!! %d ', err_code)
+                if GTG:
+                    move_con(twist.linear.x, twist.angular.z)
+                else:
+                    fr_vel_pub.publish(fl_vel)
+                    fl_vel_pub.publish(fr_vel)
+                    br_vel_pub.publish(bl_vel)
+                    bl_vel_pub.publish(br_vel)
+                    FR_pub.publish(fr_float64)
+                    FL_pub.publish(fl_float64)
+                    BR_pub.publish(br_float64)
+                    BL_pub.publish(bl_float64)
+
+                # rospy.loginfo('-------------Check flag-------------')
+                if odom_x != 0.0 and odom_y != 0.0 and odom_yaw != 0.0:
+                    x_pose = odom_x
+                    y_pose = odom_y
+                    z_pose = odom_z
+
+                if (yaw == pre_yaw) and pre_x_pose != 0 and imu_yaw != 0:
+                    reset_odom_service_name = '/small_scout_1/reset_odom_to_pose'
+                    reset_odom_srv_class = rosservice.get_service_class_by_name(reset_odom_service_name)
+                    reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name, reset_odom_srv_class)
+                    reset_odom_srv_client(pre_x_pose, pre_y_pose, z_pose, roll, imu_pitch, imu_yaw)
+                    rospy.loginfo('Reset Odom!! x : %f, y : %f, z : %f, yaw : %f, pitch : %f ',
+                                  pre_x_pose, pre_y_pose, z_pose, imu_yaw, imu_pitch)
+
+                if reset_odom:
+                    rospy.loginfo('============= Need Reset Odom =============')
+
+                rospy.loginfo('Goal%d is %d, %d, target yaw is %f, step:%s',
+                              goal, goal_x, goal_y, target_angle, step_goal)
+                rospy.loginfo('X : %f , Y : %f , Z : %f , yaw : %d (%d), pit : %f', x_pose, y_pose, z_pose, angle,
+                              math.degrees(imu_yaw), imu_pitch)
+
+                if slam:
+                    rospy.loginfo('Go to next point !!! %d ', goal)
+
+                if get_pose_result > 0:
+                    rospy.loginfo('========== Get_pose_result %d !!! ==========', get_pose_result)
+
+                last_time = current_time
+                scan_result.ranges = obs_r
+                scan_pub.publish(scan_result)
+
+                pre_x_pose = x_pose
+                pre_y_pose = y_pose
+                pre_yaw = yaw
+                # rospy.loginfo('rospy.is_shutdown()? 2 %s', rospy.is_shutdown())
+
+            except Exception as e:
+                err_code = 10
+                print("Obstacle except Error", e)
+                pass
+        rospy.loginfo('Ros is shutdown!!!! %s', rospy.is_shutdown())
+
+
+def shut_down():
+    print("Ros is shutdown!! code : %d " % err_code)
+
+
+def main():
+    if os.name != 'nt':
+        settings = termios.tcgetattr(sys.stdin)
+    rospy.init_node('turtlebot3_teleop')
+    rospy.on_shutdown(shut_down)
+    rospy.Subscriber('scout_1/volatile_sensor', VolSensorMsg, vol_callback)
+
+    just_debug = True
+    if just_debug:
+        sleep_second = 1
+    else:
+        sleep_second = 10
+
+    for i in range(0, sleep_second):
+        rospy.loginfo('wait for %d second now : %d s', sleep_second, i)
+        time.sleep(1)
+    global angle_point, before_score_time, vol_type_array
+    before_score_time = rospy.Time.now()
+
+    for i in range(0, 360):
+        line = [math.cos(math.radians(i)), math.sin(math.radians(i))]
+        angle_point[i] = line
+
+    rospy.loginfo(vol_type_array)
+
+    # Set up your subscriber and define its callback
+    rospy.Subscriber('small_scout_1/odom', Odometry, odom_callback)
+    rospy.Subscriber('small_scout_1/imu', Imu, imu_callback)
+    rospy.Subscriber("small_scout_1/joint_states", JointState, get_joint)
+    # light_srv_client("%s" % light_data)
+
+    rospy.loginfo('Ros is start!!!! %s', rospy.is_shutdown())
+
+    brake_service_name = '/small_scout_1/brake_rover'
+    brake_srv_class = rosservice.get_service_class_by_name(brake_service_name)
+    brake_srv_client = rospy.ServiceProxy(brake_service_name, brake_srv_class)
+    brake_result = brake_srv_client(brake_data)
+
+    if not just_debug:
+        try:
+            reset_odom_service_name = '/small_scout_1/reset_odom_to_pose'
+            reset_odom_srv_class = rosservice.get_service_class_by_name(
+                reset_odom_service_name)
+            reset_odom_srv_client = rospy.ServiceProxy(reset_odom_service_name,
+                                                       reset_odom_srv_class)
+            reset_odom_srv_client(9.99, 3.99, 1.65, -0.00049, 0.002792, 0.78253)
+        except Exception as e:
+            print("Obstacle except Error", e)
+            pass
+
+    angle = Float64()
+    angle = math.radians(5)
+    sensor_pitch.publish(angle)
+
+    # rospy.init_node('turtlebot3_obstacle')
+    try:
+        rospy.loginfo('Check the obstacle ')
+        Obstacle()
+        # while 1:
+        #     x = 1
+
+    except rospy.ROSInterruptException:
+        pass
+
+
+if __name__ == '__main__':
+    main()

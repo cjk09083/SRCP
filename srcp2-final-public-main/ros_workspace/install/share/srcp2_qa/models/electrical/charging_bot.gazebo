@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+	Space Robotics Challenge (2)
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+	Charging bot for simulating a charging station
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+
+    <gazebo>
+        <plugin name="charging_station_plugin" filename="libChargingStationPlugin.so">            
+            <!-- 
+                <consumer> : The values of the tags below must match the <consumer> tags 
+                implimented in the battery plugin sdf configuration
+            -->
+            <consumer>
+                <uniqueName>charging_station</uniqueName>               
+            </consumer>
+            <!-- this is the rate of a tesla charger....150kW -->
+            <maxChargingRate>150000</maxChargingRate>
+            <maxDistanceToChargingLink>0.50</maxDistanceToChargingLink>
+            <maxAngleOffsetToChargingLink>0.1</maxAngleOffsetToChargingLink>
+
+        </plugin>
+    </gazebo>
+
+</robot>

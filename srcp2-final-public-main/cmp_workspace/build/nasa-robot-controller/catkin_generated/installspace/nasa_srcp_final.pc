@@ -1,0 +1,8 @@
+prefix=/home/srcp2/cmp_workspace/install
+
+Name: nasa_srcp_final
+Description: Description of nasa_srcp_final
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

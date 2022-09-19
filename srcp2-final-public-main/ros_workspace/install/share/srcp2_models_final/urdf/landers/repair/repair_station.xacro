@@ -1,0 +1,93 @@
+<?xml version="1.0" ?>
+<!--
+    Space Robotics Challenge (2): Final Round
+    NASA-JSC
+    Copyright (c) 2020, All Rights Reserved
+    Unauthorized distribution strictly prohibited
+
+    Definition of the Repair Station.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="repair_station">
+        <!-- includes -->
+    <xacro:include filename="../../rovers/common/inertia_macros.xacro"/>
+    <xacro:arg name="name" 		default="repair_station"/>
+    <xacro:arg name="len" 		default="4.30"/>
+    <xacro:arg name="rad" 		default="3.194"/>
+    <xacro:arg name="zoffset"	default="3.10"/> 
+    <xacro:arg name="zoffset_collision"	default="2.05"/> 
+
+    <!-- Main Link  -->
+    <link name="$(arg name)_link">
+        <inertial>
+            <origin xyz="0 0 $(arg zoffset)" 
+                    rpy="0 0 0"/>
+
+            <mass 	value = "25.0"/>
+
+            <xacro:cylinder_inertia
+                    m = "25.0"
+                    h = "3.0"
+                    r = "0.2" />
+
+        </inertial>
+
+        <collision>
+            <origin xyz="0 0 $(arg zoffset_collision)" 
+                    rpy="0 0 0"/>
+            <geometry>
+                <cylinder 
+                    length="$(arg len)"
+                    radius="$(arg rad)"/>
+            </geometry>
+        </collision>
+
+        <visual>
+            <origin xyz="0 0 $(arg zoffset)" 
+                    rpy="0 0 0"/>
+            <geometry>
+                <mesh
+                    filename = "package://srcp2_models_final/meshes/landers/repair/repair-and-recharge.dae"
+                    scale    = "1 1 1"/>
+            </geometry>
+        </visual>
+    </link>
+
+    <!-- Spawn Zone  -->
+    <link name="$(arg name)_spawn_zone">
+
+        <gravity>false</gravity>
+
+        <collision name="$(arg name)_spawn_zone_col">
+            <geometry>
+                <cylinder>
+                    <cylinder 
+                    length="$(arg len)"
+                    radius="$(arg rad)"/>
+                </cylinder>
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- Spawn Joint Main to Spawn  -->
+    <joint name="$(arg name)_spawning_zone_joint" type="fixed">
+        <parent  link="$(arg name)_link"/>
+        <child link="$(arg name)_spawn_zone"/>
+        <axis>0 0 1</axis>
+    </joint>
+
+    <!-- Gazaboo -->
+    <gazebo 	reference="$(arg name)_link" 
+                mu1="1.0" 
+                mu2="1.0" 
+                kp="100000.0" 
+                kd="1.0"/>
+
+    <gazebo> 
+        <static>true</static>
+        <selfCollide>false</selfCollide>
+        <gravity>false</gravity>
+    </gazebo> 
+
+
+    
+ </robot>

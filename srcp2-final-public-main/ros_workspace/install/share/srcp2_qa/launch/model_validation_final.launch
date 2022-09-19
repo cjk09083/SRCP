@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Space Robotics Challenge (2): Final Round
+	NASA-JSC
+	Copyright (c) 2019, All Rights Reserved
+	Unauthorized distribution strictly prohibited
+
+    General Purpose validation launchfile for Final Round Robot models
+-->
+<launch>
+
+    <!-- path from srcp2_models_final/models to validate-->
+    <arg name="robot" default="small_scout"/>
+    <arg name="robot_xacro_path" value="$(find srcp2_models_final)/urdf/rovers/$(arg robot)/$(arg robot).xacro"/>
+
+    <!-- other arguments -->
+    <arg name="rover_name"  default="$(arg robot)"/>
+    <arg name="run_endless" default="false"/>
+    <arg name="init_pose"   default="-x 0 -y 0 -z 1.5"/>
+    <arg name="paused"      default="true"/>
+    <arg name="seed"        default="42"/>
+
+    <!-- generate the standard testing world -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name"        value="$(find srcp2_models_qa)/worlds/basic_qa.world"/>
+        <arg name="paused"            value="$(arg paused)"/>
+        <arg name="extra_gazebo_args" value="--seed $(arg seed)"/>
+    
+        <arg name="verbose"      value="true"/>
+        <arg name="use_sim_time" value="true"/>
+        <arg name="recording"    value="false"/>
+    </include>
+
+    <!-- necessary to keep parts of the sim from yelling -->
+    <param name="run_endless" value="$(arg run_endless)" />
+
+    <!-- path to other gazebo models -->
+    <env name="GAZEBO_MODEL_PATH" value="$(find srcp2_models_final)/urdf/rovers"/>
+
+    <!-- the tf state publisher -->
+    <node 
+        name = "robot_state_publisher"
+        pkg  = "robot_state_publisher"
+        type = "robot_state_publisher"/>
+
+    <!-- parse the robot's xacro and put it on the parameter server -->
+    <param
+        name    = "robot_description"
+        command = "$(find xacro)/xacro --check-order '$(arg robot_xacro_path)' rover_name:=$(arg rover_name)" />
+
+    <!-- spawn the robot from param server's robot_description -->
+    <node
+        name = "spawn_urdf"
+        pkg  = "gazebo_ros"
+        type = "spawn_model"
+        args = "-param robot_description -urdf $(arg init_pose) -model $(arg rover_name)"
+        />
+
+</launch>
+
+
+
+

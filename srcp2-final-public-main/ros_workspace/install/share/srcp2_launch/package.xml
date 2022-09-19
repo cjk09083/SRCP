@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>srcp2_launch</name>
+  <version>0.0.0</version>
+  <description>The srcp2_launch package</description>
+  <maintainer email="redacted@nasa.gov">Jane Doe</maintainer>
+  <license>Copyright (c) NASA-JSC 2020, 2021, All Rights Reserved</license>
+
+  <!-- The *depend tags are used to specify dependencies -->
+  <!-- Dependencies can be catkin packages or system dependencies -->
+  <build_depend>gazebo_ros</build_depend>
+  <build_export_depend>gazebo_ros</build_export_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <buildtool_depend>catkin</buildtool_depend>
+</package>
