@@ -79,8 +79,12 @@
 <img src="사진%26영상/장애물회피.gif" width="60%"/>
 </div></br>
 
-### 5. 광물 탐지
-- 인공지능 Image Classification 알고리즘인 YOLO를 사용해 카메라 영상에서 광물을 탐지하고 광물의 방향을 측정
+### 5. 이미지 분류 (YOLO)
+- 인공지능 Image Classification 알고리즘인 YOLO를 사용해 카메라 영상에서 광물을 탐지하고 광물의 방향을 측정 (좌측: 광물, 우측: 광물을 판별하고 접근)
+<div align="center">
+<img src="사진%26영상/지형에%20묻힌%20광물.png" width="40%"/>&nbsp;
+<img src="사진%26영상/광물탐지.gif" width="40%"/>
+</div></br>
 
 
 
