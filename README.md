@@ -13,7 +13,7 @@
 
  <div align="center">
 <img src="https://github.com/cjk09083/SRCP/blob/main/%EC%82%AC%EC%A7%84%26%EC%98%81%EC%83%81/0.%20Main.png" width="60%"/>
-</div></br>
+</div>
  
 
 ## 목적
