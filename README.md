@@ -31,8 +31,8 @@
 ## 구성
 - 로봇은 자원을 탐지하는 Scout, 채취하는 Excavator, 수송하는 Hauler가 2대씩 총 6대로 구성
 <div align="center">
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/1.%20Scout.png" width="25%"/>&nbsp;
-<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/2.%20Excavator.png" width="25%"/>&nbsp;
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/1.%20Scout.png" width="30%"/>&nbsp;
+<img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/2.%20Excavator.png" width="35%"/>&nbsp;
 <img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/3.%20Hauler.png" width="25%"/>
 </div></br>
  
