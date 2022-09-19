@@ -28,10 +28,7 @@
 - 장애물 회피 알고리즘
 - SLAM을 활용한 주행 알고리즘 (RTAB SLAM)
 
-
-## 기능
-
-### 구성
+## 구성
 - 로봇은 자원을 탐지하는 Scout, 채취하는 Excavator, 수송하는 Hauler가 2대씩 총 6대로 구성
 <div align="center">
 <img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/1.%20Scout.png" width="25%"/>&nbsp;
@@ -42,6 +39,8 @@
 - 로봇에는 공통적으로 회전가능한 관절들과 라이트, 카메라, IMU 센서가 제공 
 - 로봇의 충전을 위해선 로봇을 회전시켜 태양광 패널로 충전을 하거나 Repair Station으로 복귀해야 함
 - 자원을 수송하는 Hauler가 Processing plant의 제출상자에 광물을 성공적으로 제출해야 점수가 획득
+
+## 기능
 
 ### 1. ROS 컨트롤러
 -
