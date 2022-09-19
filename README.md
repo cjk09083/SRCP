@@ -61,7 +61,7 @@
 
 ### 4. 장애물 회피
 - 장애물을 탐지하기 위해 라이다(Lidar)센서를 사용
-- 라이다 센서로 거리만 탐지할경우 언덕이나 구덩이도 장애물(암석)으로 측정되는 문제가 발생
+- 라이다 센서로 거리만 탐지할경우 아래와 같이 언덕 지형(좌측)도 장애물(우측)으로 감지되는 문제가 발생
 <div align="center">
 <img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/6-1%20언덕%20앞%20로봇.png" width="40%"/>&nbsp;
 <img src="https://github.com/cjk09083/SRCP/blob/main/사진%26영상/6-2%20암석%20앞%20로봇.png" width="40%"/>
