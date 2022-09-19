@@ -51,15 +51,24 @@
 ### 1. 로봇 컨트롤러 
 - 로봇의 컨트롤러는 모두 Python으로 구성
 - 모든 로봇에 공통적으로 관절과 바퀴를 제어해 원하는 좌표까지 이동하는 메인 컨트롤러를 기본으로 개별 클래스로 카메라, 조명, 센서들, 버킷, 카고등을 연결
-- 모든 센서값과 제어 명령은 ROS 메세지로 구현
+- 모든 센서값과 제어 명령은 ROS 메세지로 구현 (Excavator가 광물을 채굴하도록 관절 제어)
+<div align="center">
+<img src="사진%26영상/채굴.png" width="60%"/>
+</div></br>
 
 ### 2. RTAB SLAM
 - Localization(현재 위치 파악)을 위해 RTAB SLAM(Simultaneous Localization and Mapping)을 활용해 Odometry(주행기록계) 구현 
-- 아래 좌측 사진은 RTAB SLAM의 구현 예, 우측은 SRCP에서 구현된 RTAB SLAM
+<div align="center">
+<img src="사진%26영상/RTAB.png" width="60%"/>
+</div></br>
 
 ### 3. 이미지 기반 거리 및 좌표 보정
 - IMU와 SLAM을 사용해도 점점 위치 오차가 누적되기 때문에 광물을 탐지할때 좌표의 정확도가 하락
-- 광물을 탐지할때마다 맵의 중앙에 있는 Plant을 바라보고 카메라에 나타나는 건물의 높이를 통해 거리를 측정
+- 광물을 탐지할때마다 맵의 중앙에 있는 Plant을 바라보고 카메라에 나타나는 파란색 창문의 높이를 통해 거리를 측정
+<div align="center">
+<img src="사진%26영상/Plant%20거리%20측정.png" width="60%"/>
+</div></br>
+
 - 이후 측정된 거리와 필터링된 IMU 값을 이용해 현재 좌표를 보정
 - 이후 광물을 제출하러 기지 중앙에 왔을때도 Plant를 바라보고 좌표 보정
 
@@ -83,13 +92,13 @@
 - 인공지능 Image Classification 알고리즘인 YOLO를 사용해 카메라 영상에서 광물을 탐지하고 광물의 방향을 측정 
  (좌측: 광물, 우측: 광물을 판별하고 접근)
 <div align="center">
-<img src="사진%26영상/지형에%20묻힌%20광물.png" width="30%"/>&nbsp;
-<img src="사진%26영상/광물탐지.gif" width="60%"/>
+<img src="사진%26영상/지형에%20묻힌%20광물.png" width="20%"/>&nbsp;
+<img src="사진%26영상/광물탐지.gif" width="70%"/>
 </div></br>
 
 -  Excavator 에서 Hauler로 광물을 전달할때 카메라로 서로를 판별, 바라보게 만들고 접촉하여 전달
 <div align="center">
-<img src="사진%26영상/전달.gif" width="60%"/>
+<img src="사진%26영상/전달.gif" width="70%"/>
 </div></br>
 
 
