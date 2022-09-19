@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmp_workspace" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmp_workspace (copy)" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmp_workspace (copy)/src/darknet_ros" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmp_workspace (copy)/src/darknet_ros/darknet" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmp_workspace/src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmp_workspace/src/nasa-robot-controller" vcs="Git" />
+  </component>
+</project>

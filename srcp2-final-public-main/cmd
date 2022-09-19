@@ -1,0 +1,240 @@
+/home/srcp2/.ros/log/583ba8c6-e6dd-11eb-a384-0242ac120003/roslaunch-dc68addbd338-6082.log
+
+ethane, 2.6 , -29
+
+1. sudo docker login
+
+	docker id : purduehongik
+	docker pw : smart@purdue
+
+./srcp2-final-public-main/docker/scripts/run_srcp2_final  -C ~/srcp2-final-public-main/config/default_config.yaml -L
+// 시뮬 생성용 doker
+
+
+docker start purdue-hongik-0714
+// 제어용 docker 실행
+docker attach purdue-hongik-0714
+// 제어용 docker 재진입
+docker exec -it purdue-hongik-0714 bash
+// 제어용 docker 재진입(터미널 2개째부터)
+
+source ~/cmp_workspace/devel/setup.bash
+// rosrun 이전 소스 파일 활성화
+
+roslaunch test_pkg setup.launch
+// rtab 실행
+
+rosservice call /small_scout_1/spot_light "range: 0.0"
+// 조명 제어 (0~20m)
+
+rosservice call /small_scout_1/system_monitor/power_saver "power_save: true"
+
+//power saver
+
+rostopic pub /small_hauler_1/bin/command/position std_msgs/Float64 "data: 2.5"
+2.35619 rad = 135 deg
+// hauler bin 제어
+
+run_comp_final 종료 :  exit
+run_srcp2_final 종료 : docker kill srcp2-final
+
+
+header:
+  seq: 1910
+  stamp:
+    secs: 509
+    nsecs: 530000000
+  frame_id: ''
+score: 2.0
+hauler_volatile_score: 0.0
+types_collected:
+  - ethane
+  - regolith
+masses_collected_kg: [0.1, 7.0]
+---
+
+
+
+//굴착기 1 팔 제어
+roslaunch small_excavator_moveit_config excavator_1_arm_controller.launch
+
+./srcp2-final-public-main/docker/scripts/run_comp_final_main2 -d -i -L
+./srcp2-final-public-main/docker/scripts/run_comp_final -d -i -L
+./srcp2-final-public-main/docker/scripts/run_comp_final_tool -d -i -L
+// 제어용 docker (* 금지 *)
+
+docker exec -it competitor-final bash "source ~/cmp_workspace/devel/setup.bash"
+
+// docker 터미널 접속
+
+docker exec -it srcp2-final bash -c "source ~/ros_workspace/install/setup.bash;rosrun rviz rviz" // Rviz 활성화
+
+ source ~/ros_workspace/install/setup.bash
+
+rostopic echo /scout_1/laser/scan
+
+/usr/include/opencv4/opencv2/core/cvdef.h
+
+nvidia_docker v2 실행 : docker run --runtime=nvidia --rm nvidia/cuda:11.0-devel nvidia-smi
+
+yolo v4 설치 https://github.com/Tossy0423/yolov4-for-darknet_ros
+git clone --recursive https://github.com/Tossy0423/yolov4-for-darknet_ros.git
+
+sudo apt install ros-noetic-rtabmap-ros -y
+//rtab 설치
+//rtab slam E: Sub-process /usr/bin/dpkg returned an error code (1) 오류
+
+sudo rm  /var/lib/dpkg/info/systemd-timesyncd.*
+
+sudo rm  /var/lib/dpkg/info/udev.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-core.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-ati.*
+sudo rm  /var/lib/dpkg/info/network-manager.*
+sudo rm  /var/lib/dpkg/info/libsane:amd64.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-radeon.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-input-wacom.*
+sudo rm  /var/lib/dpkg/info/bluez.*
+sudo rm  /var/lib/dpkg/info/network-manager-pptp.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-fbdev.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-vmware.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-intel.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-all.*
+sudo rm  /var/lib/dpkg/info/pulseaudio-module-bluetooth.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-vesa.*
+sudo rm  /var/lib/dpkg/info/sane-utils.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-qxl.*
+sudo rm  /var/lib/dpkg/info/network-manager-gnome.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-amdgpu.*
+sudo rm  /var/lib/dpkg/info/colord.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-video-nouveau.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-input-libinput.*
+sudo rm  /var/lib/dpkg/info/gnome-session-bin.*
+sudo rm  /var/lib/dpkg/info/ubuntu-session.*
+sudo rm  /var/lib/dpkg/info/gnome-startup-applications.*
+sudo rm  /var/lib/dpkg/info/gdm3.*
+sudo rm  /var/lib/dpkg/info/gnome-control-center.*
+sudo rm  /var/lib/dpkg/info/xserver-xorg-input-all.*
+
+sudo apt-get clean
+sudo apt-get update
+sudo apt-get upgrade
+
+
+
+--in apt-get error :
+curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+
+
+rosservice call /small_scout_1/reset_odom_to_pose "{x: 0.0, y: 0.0, z: 0.0, roll: 0.0, pitch: 0.0, yaw: 0.0}"
+
+/small_scout_1/rtabmapviz subscribed to (exact sync):
+   /small_scout_1/odom \
+   /small_scout_1/camera/left/image_rect_color \
+   /small_scout_1/camera/right/image_rect \
+   /small_scout_1/camera/left/camera_info \
+   /small_scout_1/camera/right/camera_info \
+   /small_scout_1/odom_info
+
+
+docker commit competitor-final comp_final/hongik:ver1 결과 : sha256:e05506e253701c6847857fb303b8ef1f299318c16fe3069097942632606f2d8e
+sha256:d8ac4bc105ebe8e2138689ec7e936c2e4c0de8b4a3d8f4ed9470079f305e2f48
+
+
+
+
+
+docker run --name competitor-final\
+    --user 1001:1001 \
+    -it \
+    --volume="/etc/group:/etc/group:ro"   \
+    --volume="/etc/passwd:/etc/passwd:ro" \
+    --volume="/etc/shadow:/etc/shadow:ro" \
+    --env=XAUTHORITY=/tmp/.docker.xauth \
+    --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw \
+    --volume=/tmp/.docker.xauth:/tmp/.docker.xauth:rw \
+    --volume=/dev/log:/dev/log:rw \
+    --gpus=all \
+    --device=/dev/dri:/dev/dri \
+    --network srcp2net \
+    --network-alias cmpsolution \
+    --env=ROS_MASTER_URI="http://simmaster:11311" \
+    developer \
+    scheducation/srcp2_comp:final_competitor /bin/bash
+
+
+
+
+
+
+
+/////////////////////////////////////예선///////////////////////////////////////
+docker login
+./catkin_ws/srcp2-competitors-master/docker/scripts/launch/roslaunch_docker --run-round 1 -L
+./catkin_ws/srcp2-competitors-master/docker/scripts/launch/roslaunch_docker --run-round 3 -L
+
+
+
+source ~/catkin_ws/devel/setup.bash
+source ~/srcp2-competitors-master/ros_workspace/install/devel/setup.bash
+
+roslaunch hongik_nasa_competition_pkg run_round1.launch
+roslaunch nasa_competition_pkg nasa_round_2.launch
+roslaunch hongik_nasa_competition_pkg run_round3.launch
+
+roslaunch nasa_competition_pkg
+d
+
+source ~/srcp2-competitors-master/ros_workspace/install/devel/setup.bash
+. ~/catkin_ws/devel/setup.bash
+
+export PATH=/usr/local/cuda-11.0/bin:/usr/local/cuda-11.0/NsightCompute-2019.1${PATH:+:${PATH}}
+
+
+rostopic pub /scout_1/skid_cmd_vel  geometry_msgs/Twist "linear:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+angular:
+  x: 0.0
+  y: 0.0
+  z: 0.0
+
+. ~/catkin_ws/install/devel/setup.bash
+
+./srcp2-competitors-master/docker/scripts/launch/roslaunch_docker --run-round 1
+./srcp2-competitors-master/docker/scripts/launch/roslaunch_docker --run-round 2
+source srcp2-competitors-master/ros_workspace/install/devel/setup.bash
+roslaunch hongik_nasa_competition_pkg run_round1.launch
+
+
+sha256:53f55522d4ad870ab8f789bdb9fc7b66055aef42e74469b8538f7616e83a173f
+
+sha256-53f55522d4ad870ab8f789bdb9fc7b66055aef42e74469b8538f7616e83a173f
+
+
+
+docker run --network host --privileged -it scheducation/srcp2_qualification_submissions:purdue-hongik bash
+
+sudo apt install ros-melodic-moveit
+
+sudo apt install ros-melodic-joint-state-publisher-gui
+
+sudo apt-get install ros-melodic-robot-state-publisher
+
+
+moveit_setup_assistant
+
+excavator_arm_moveit_config
+
+
+sudo apt-get install libx11-dev
+sudo apt install ros-melodic-tf
+sudo apt install ros-melodic-opencv*
+sudo apt install ros-melodic-rtabmap-ros
+
+srcp2_msgs share로 이동
+
+commit
+
+

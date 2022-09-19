@@ -1,0 +1,30 @@
+# ------------------------------------------------------------------------------
+# Robot team configuration
+#
+# For strict competition runs, this is the ONLY part of this file that will
+# be used
+team:
+  scouts: 1
+  excavators: 1
+  haulers: 1
+
+# ------------------------------------------------------------------------------
+# Simulation Configuration
+#
+# Competitors are free to set these for their own debugging, but these
+# values will be ignored by the competition run
+#
+seed: 6
+use_gui: true
+use_noise: true
+start_paused: false
+duration: 86400 # seconds
+spawn_center_x: 0
+spawn_center_y: 0
+#spawn_center_z: 10
+generate_heightmap: true
+heightmap_path: ~/.gazebo/runtime_heightmap.png
+run_endless : true
+system_monitor_enabled : true
+start_power_percentage : 100
+ 
