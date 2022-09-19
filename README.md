@@ -4,7 +4,7 @@
 <img src="https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=OpenCV&logoColor=white"/>
 <img src="https://img.shields.io/badge/TensorFlow-FF6F00?style=for-the-badge&logo=TensorFlow&logoColor=white"/>
 
-<a href="https://ieeexplore.ieee.org/document/9268238" target="_blank">
+<a href="http://www.riss.kr/link?id=T15894033" target="_blank">
 <img src="https://img.shields.io/badge/관련논문-FF0000?style=for-the-badge&logo=Apache&logoColor=white"/>
 </a>
 </div>
