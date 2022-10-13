@@ -74,6 +74,10 @@
 - 이후 측정된 거리와 필터링된 IMU 값을 이용해 현재 좌표를 보정
 - 이후 광물을 제출하러 기지 중앙에 왔을때도 Plant를 바라보고 좌표 보정
 
+- Robot이 Plant 앞 정확한 위치에 주차할 수 있도록 카메라로 거리 및 방향을 실시간 측정하며 주행 
+[![주차 알고리즘](https://i.imgur.com/vKb2F1B.png)](https://vimeo.com/759747114)
+
+
 ### 4. 장애물 회피
 - 장애물을 탐지하기 위해 라이다(Lidar)센서를 사용
 - 라이다 센서로 거리만 탐지할경우 아래와 같이 언덕 지형(좌측)도 장애물(우측)으로 감지되는 문제가 발생
@@ -103,10 +107,6 @@
 <div align="center">
 <img src="사진%26영상/전달.gif" width="70%"/>
 </div></br>
-
-
-[![Watch the video](https://i.imgur.com/vKb2F1B.png)](https://vimeo.com/759747114)
-
 
 
 ## 수상
