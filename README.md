@@ -107,6 +107,13 @@
 <img src="사진%26영상/전달.gif" width="70%"/>
 </div></br>
 
+## 주요 문제점 및 해결방법
+- IMU와 SLAM을 사용해도 점점 위치 오차가 누적되기 때문에 광물을 탐지할때 좌표의 정확도가 하락 </br>
+=> 중앙에 있는 구조물의 좌표를 저장해두고 광물 발견시, 복귀시 마다 구조믈을 바라보고 좌표 보정
+
+- 6 대의 로봇이 동시에 YOLO 사용시 CPU 및 GPU 과부화 </br>
+=> 로봇을 2개의 팀(Scout + Excavator + Hauler)으로 나누어 팀마다 하나의 YOLO를 공유하며 사용하도록 변경 </br>
+=> 최전방의 Scout가 YOLO로 장애물과 광물을 탐지하고 다른 로봇이 뒤따르는 형식
 
 ## 수상
 - <b>SRCP: Space Robotics Challenge Phase 2 (NASA 미항공우주국) :	<a href="http://www.irobotnews.com/news/articleView.html?idxno=23801" target="_blank">Qualification Winner 2021.02 </a></b>
