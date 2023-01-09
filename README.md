@@ -21,7 +21,7 @@
  
 
 ## 목적
-- 다른 별에서 현장자원활용(In-Situ Resource Utilization : ISRU)이 가능한 자동 제어 로봇 개발
+- 다른 에서 현장자원활용(In-Situ Resource Utilization : ISRU)이 가능한 자동 제어 로봇 개발
 - 로봇을 제어하여 <b>1.자원 탐지 / 2.자원 채취 / 3.기지로 복귀</b> 미션을 연속으로 수행
 - 성공적인 주행을 위해 Image Classification과 SLAM 기술을 적용
 
